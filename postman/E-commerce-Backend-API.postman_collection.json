@@ -1,0 +1,555 @@
+{
+  "info": {
+    "name": "E-commerce Backend API",
+    "description": "Complete API collection for the E-commerce Backend application demonstrating event-driven architecture, CQRS pattern, and microservices design principles.",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Product Management",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Wireless Bluetooth Headphones\",\n  \"description\": \"High-quality wireless headphones with active noise cancellation and 30-hour battery life\",\n  \"categories\": [\"Electronics\", \"Audio\", \"Headphones\"],\n  \"price\": 199.99,\n  \"sku\": \"WBH-TEST-001\",\n  \"attributes\": {\n    \"color\": \"black\",\n    \"battery_life\": \"30 hours\",\n    \"noise_cancellation\": \"active\",\n    \"wireless\": \"true\"\n  },\n  \"images\": [\n    \"https://images.unsplash.com/photo-1505740420928-5e560c06d30e\",\n    \"https://images.unsplash.com/photo-1484704849700-f032a568e944\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Create a new product with complete information"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1?userId=user123&sessionId=session456",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "1"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user123",
+                  "description": "User ID for analytics tracking"
+                },
+                {
+                  "key": "sessionId",
+                  "value": "session456",
+                  "description": "Session ID for analytics tracking"
+                }
+              ]
+            },
+            "description": "Retrieve a specific product by ID and record view event"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Wireless Bluetooth Headphones Pro\",\n  \"description\": \"Updated premium wireless headphones with enhanced features\",\n  \"price\": 249.99,\n  \"attributes\": {\n    \"color\": \"black\",\n    \"battery_life\": \"40 hours\",\n    \"noise_cancellation\": \"adaptive\",\n    \"wireless\": \"true\",\n    \"version\": \"pro\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "1"]
+            },
+            "description": "Update an existing product (partial update supported)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "1"]
+            },
+            "description": "Delete a product and publish deletion event"
+          },
+          "response": []
+        }
+      ],
+      "description": "Core product CRUD operations with event publishing"
+    },
+    {
+      "name": "Search & Discovery",
+      "item": [
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=wireless&categories=Electronics&minPrice=50&maxPrice=300&page=0&size=10&sortBy=popularityScore&sortDirection=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "wireless",
+                  "description": "Search query"
+                },
+                {
+                  "key": "categories",
+                  "value": "Electronics",
+                  "description": "Filter by category"
+                },
+                {
+                  "key": "minPrice",
+                  "value": "50",
+                  "description": "Minimum price filter"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "300",
+                  "description": "Maximum price filter"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page number (0-based)"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "popularityScore",
+                  "description": "Sort field"
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "desc",
+                  "description": "Sort direction"
+                }
+              ]
+            },
+            "description": "Advanced product search with filters and pagination using Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Related Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1/related?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "1", "related"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "Maximum number of related products"
+                }
+              ]
+            },
+            "description": "Find related products using Elasticsearch 'More Like This' functionality"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Popular Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/popular?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "popular"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of popular products"
+                }
+              ]
+            },
+            "description": "Get most popular products based on popularity score"
+          },
+          "response": []
+        },
+        {
+          "name": "Autocomplete Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/autocomplete?q=head&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "autocomplete"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "head",
+                  "description": "Partial query for autocomplete"
+                },
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "Maximum number of suggestions"
+                }
+              ]
+            },
+            "description": "Get autocomplete suggestions for product names"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Products by Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/categories?categories=Electronics&categories=Audio&page=0&size=20&sortBy=name&sortDirection=asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "categories"],
+              "query": [
+                {
+                  "key": "categories",
+                  "value": "Electronics"
+                },
+                {
+                  "key": "categories",
+                  "value": "Audio"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "asc"
+                }
+              ]
+            },
+            "description": "Get products filtered by specific categories"
+          },
+          "response": []
+        }
+      ],
+      "description": "Advanced search and product discovery features"
+    },
+    {
+      "name": "Admin Operations",
+      "item": [
+        {
+          "name": "Publish Batch Messages",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/publish-batch?topic=test-events&messageCount=10&eventType=TestEvent",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "publish-batch"],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "test-events",
+                  "description": "Topic to publish to"
+                },
+                {
+                  "key": "messageCount",
+                  "value": "10",
+                  "description": "Number of test messages to publish"
+                },
+                {
+                  "key": "eventType",
+                  "value": "TestEvent",
+                  "description": "Type of test event"
+                }
+              ]
+            },
+            "description": "Publish a batch of test messages to demonstrate pub/sub functionality"
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Full Elasticsearch Sync",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/full",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "sync", "full"]
+            },
+            "description": "Manually trigger a full synchronization from MySQL to Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sync Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "sync", "status"]
+            },
+            "description": "Get current synchronization status between MySQL and Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Specific Product",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/product/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "sync", "product", "1"]
+            },
+            "description": "Manually synchronize a specific product to Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Publisher Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/stats/publisher",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "stats", "publisher"]
+            },
+            "description": "Get statistics about the message publisher performance"
+          },
+          "response": []
+        }
+      ],
+      "description": "Administrative operations for system management and testing"
+    },
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Simple health check to verify application is running"
+          },
+          "response": []
+        },
+        {
+          "name": "Detailed Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health/detailed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health", "detailed"]
+            },
+            "description": "Comprehensive health check including all system components"
+          },
+          "response": []
+        },
+        {
+          "name": "Get System Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health", "metrics"]
+            },
+            "description": "Get various system metrics and statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Spring Actuator Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Spring Boot Actuator health endpoint"
+          },
+          "response": []
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "prometheus"]
+            },
+            "description": "Prometheus metrics endpoint for monitoring"
+          },
+          "response": []
+        }
+      ],
+      "description": "Health checks and monitoring endpoints"
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Create Product - Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"description\": \"This should fail validation\",\n  \"categories\": [],\n  \"price\": -10.00,\n  \"sku\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Test validation error handling with invalid product data"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product - Duplicate SKU",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate Product\",\n  \"description\": \"This should fail due to duplicate SKU\",\n  \"categories\": [\"Test\"],\n  \"price\": 99.99,\n  \"sku\": \"WBH-TEST-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Test duplicate SKU error handling"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Non-existent Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "99999"]
+            },
+            "description": "Test 404 error handling for non-existent product"
+          },
+          "response": []
+        }
+      ],
+      "description": "Test error handling and edge cases"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set correlation ID for request tracking",
+          "pm.request.headers.add({",
+          "    key: 'X-Correlation-ID',",
+          "    value: pm.globals.replaceIn('{{$guid}}').substring(0, 8)",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Basic test for successful responses",
+          "pm.test('Response status is successful', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]);",
+          "});",
+          "",
+          "// Test response time",
+          "pm.test('Response time is less than 2000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});",
+          "",
+          "// Test response structure for API endpoints",
+          "if (pm.response.code < 300 && pm.request.url.path.includes('api/v1')) {",
+          "    pm.test('Response has success field', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('success');",
+          "        pm.expect(jsonData).to.have.property('timestamp');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}
