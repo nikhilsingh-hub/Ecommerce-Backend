@@ -242,7 +242,7 @@ class OutboxEventServiceTest {
         // Given
         when(outboxEventRepository.countUnprocessedEvents()).thenReturn(15L);
         when(outboxEventRepository.getEventStatusStatistics())
-            .thenReturn(List.of(new Object[]{"processed", 3, 100L}));
+            .thenReturn(List.<Object[]>of(new Object[]{"processed", 3, 100L}));
         
         // When
         OutboxEventService.OutboxStats stats = outboxEventService.getStats();

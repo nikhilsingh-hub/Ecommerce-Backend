@@ -34,8 +34,8 @@ services:
       # Mount logs for debugging
       - ./logs/mysql:/var/log/mysql
     ports:
-      # Expose MySQL port for external connections
-      - "3306:3306"
+      # Expose MySQL port for external connections  
+      - "3307:3306"
 
   # Development Elasticsearch with more verbose logging
   elasticsearch:
