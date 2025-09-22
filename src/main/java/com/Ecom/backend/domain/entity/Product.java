@@ -20,7 +20,6 @@ import java.util.Map;
 @Entity
 @Table(name = "products", indexes = {
     @Index(name = "idx_product_sku", columnList = "sku", unique = true),
-    @Index(name = "idx_product_category", columnList = "categories"),
     @Index(name = "idx_product_price", columnList = "price"),
     @Index(name = "idx_product_created_at", columnList = "createdAt")
 })

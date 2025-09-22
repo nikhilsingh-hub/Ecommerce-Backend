@@ -37,10 +37,11 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @RequiredArgsConstructor
 public class OutboxEventService {
-    
+
     private final OutboxEventRepository outboxEventRepository;
     private final MessagePublisher messagePublisher;
     private final ObjectMapper objectMapper;
+    private final OutboxTransactionService outboxTransactionService;
     
     @Value("${outbox.batch-size:50}")
     private int batchSize;
@@ -165,17 +166,19 @@ public class OutboxEventService {
             // Publish message asynchronously
             return messagePublisher.publish(message)
                 .thenAccept(publishedMessage -> {
-                    markEventAsProcessed(event);
+                    // Mark as processed using separate transaction service
+                    outboxTransactionService.markEventAsProcessedAsync(event);
                     log.debug("Successfully published event {} with message ID {}", 
                         event.getId(), publishedMessage.getId());
                 })
                 .exceptionally(throwable -> {
-                    handleEventFailure(event, throwable);
+                    // Handle failure using separate transaction service  
+                    outboxTransactionService.handleEventFailureAsync(event, throwable);
                     return null;
                 });
                 
         } catch (Exception e) {
-            handleEventFailure(event, e);
+            outboxTransactionService.handleEventFailureAsync(event, e);
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -206,51 +209,6 @@ public class OutboxEventService {
         };
     }
     
-    /**
-     * Mark an event as successfully processed
-     */
-    @Transactional
-    protected void markEventAsProcessed(OutboxEvent event) {
-        try {
-            int updated = outboxEventRepository.markAsProcessed(event.getId(), LocalDateTime.now());
-            if (updated == 0) {
-                log.warn("Failed to mark event {} as processed - may have been processed by another instance", 
-                    event.getId());
-            }
-        } catch (Exception e) {
-            log.error("Error marking event {} as processed", event.getId(), e);
-        }
-    }
-    
-    /**
-     * Handle event processing failure
-     */
-    @Transactional
-    protected void handleEventFailure(OutboxEvent event, Throwable error) {
-        try {
-            LocalDateTime nextRetryAt = LocalDateTime.now()
-                .plusMinutes((long) Math.pow(2, event.getRetryCount() + 1));
-            
-            int updated = outboxEventRepository.incrementRetryCount(
-                event.getId(),
-                nextRetryAt,
-                error.getMessage()
-            );
-            
-            if (updated > 0) {
-                log.warn("Event {} failed processing (attempt {}), will retry at {}: {}", 
-                    event.getId(), event.getRetryCount() + 1, nextRetryAt, error.getMessage());
-            }
-            
-            // Check if event should be moved to dead letter
-            if (event.getRetryCount() >= 4) { // Will be 5 after increment
-                handleDeadLetterEvent(event, error);
-            }
-            
-        } catch (Exception e) {
-            log.error("Error handling failure for event {}", event.getId(), e);
-        }
-    }
     
     /**
      * Handle events that have exceeded retry limits

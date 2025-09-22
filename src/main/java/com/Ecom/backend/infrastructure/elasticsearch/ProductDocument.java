@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.*;
+import com.Ecom.backend.domain.entity.Product;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -101,7 +102,7 @@ public class ProductDocument {
     /**
      * Create a ProductDocument from domain Product entity
      */
-    public static ProductDocument fromProduct(com.Ecom.backend.domain.entity.Product product) {
+    public static ProductDocument fromProduct(Product product) {
         return ProductDocument.builder()
             .id(product.getId().toString())
             .productId(product.getId())
@@ -158,7 +159,7 @@ public class ProductDocument {
     /**
      * Generate tags based on product properties for better categorization
      */
-    private static List<String> generateTags(com.Ecom.backend.domain.entity.Product product) {
+    private static List<String> generateTags(Product product) {
         List<String> tags = new java.util.ArrayList<>();
         
         // Add category-based tags
@@ -221,7 +222,7 @@ public class ProductDocument {
     /**
      * Calculate score boost for relevance tuning
      */
-    private static Double calculateScoreBoost(com.Ecom.backend.domain.entity.Product product) {
+    private static Double calculateScoreBoost(Product product) {
         double boost = 1.0;
         
         // Boost based on popularity

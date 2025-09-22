@@ -55,7 +55,7 @@ public class ProductSearchService {
         
         try {
             Page<ProductDocument> searchResults = performElasticsearchQuery(searchRequest);
-            return buildSearchResponse(searchResults, searchRequest);
+            return buildSearchResponse(searchResults, searchRequest); 
             
         } catch (Exception e) {
             log.warn("Elasticsearch search failed, falling back to MySQL: {}", e.getMessage());

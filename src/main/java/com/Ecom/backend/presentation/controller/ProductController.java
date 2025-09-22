@@ -25,16 +25,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * REST Controller for Product operations.
- * 
- * This controller follows REST conventions and provides comprehensive
- * API documentation using OpenAPI annotations. It demonstrates proper
- * separation of concerns by delegating business logic to service layers.
- * 
- * Error handling is centralized through exception handlers, and all
- * responses follow a consistent API response format.
- */
+
 @RestController
 @RequestMapping("/api/v1/products")
 @Tag(name = "Products", description = "Product management operations")
