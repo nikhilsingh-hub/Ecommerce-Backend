@@ -339,6 +339,19 @@ public class ProductService {
     }
     
     /**
+     * Get all products with pagination
+     * 
+     * @param pageable Pagination parameters
+     * @return Page of product DTOs
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductDto> getAllProducts(Pageable pageable) {
+        log.debug("Fetching all products with pagination: {}", pageable);
+        Page<Product> products = productRepository.findAllWithCategories(pageable);
+        return products.map(productMapper::toDto);
+    }
+
+    /**
      * Get top products by popularity
      * 
      * @param limit Maximum number of products to return

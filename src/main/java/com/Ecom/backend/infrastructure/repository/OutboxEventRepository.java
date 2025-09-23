@@ -25,10 +25,18 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     List<OutboxEvent> findUnprocessedEvents(Pageable pageable);
 
     /**
-     * Find events eligible for retry
+     * Find fresh unprocessed events (never attempted before)
+     * Used by the main processing loop to handle new events
+     */
+    @Query("SELECT e FROM OutboxEvent e WHERE e.processed = false AND e.retryCount = 0 ORDER BY e.createdAt ASC")
+    List<OutboxEvent> findFreshUnprocessedEvents(Pageable pageable);
+
+    /**
+     * Find events eligible for retry (failed events only, excludes fresh events)
+     * Only selects events that have been attempted at least once (retryCount > 0)
      */
     @Query("SELECT e FROM OutboxEvent e WHERE e.processed = false AND " +
-           "e.retryCount < 5 AND " +
+           "e.retryCount > 0 AND e.retryCount < 5 AND " +
            "(e.nextRetryAt IS NULL OR e.nextRetryAt <= :now) " +
            "ORDER BY e.createdAt ASC")
     List<OutboxEvent> findEventsForRetry(@Param("now") LocalDateTime now, Pageable pageable);

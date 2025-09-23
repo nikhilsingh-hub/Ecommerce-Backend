@@ -112,4 +112,17 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      */
     @Query("SELECT c, COUNT(p) FROM Product p JOIN p.categories c GROUP BY c")
     List<Object[]> countProductsByCategory();
+
+    /**
+     * Find all products with eagerly loaded categories for Elasticsearch sync
+     * Uses JOIN FETCH to avoid LazyInitializationException
+     */
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.categories")
+    Page<Product> findAllWithCategories(Pageable pageable);
+
+    /**
+     * Find product by ID with eagerly loaded categories
+     */
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.categories WHERE p.id = :id")
+    Optional<Product> findByIdWithCategories(@Param("id") Long id);
 }

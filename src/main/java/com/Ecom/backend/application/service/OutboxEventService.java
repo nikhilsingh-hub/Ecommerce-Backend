@@ -28,10 +28,14 @@ import java.util.concurrent.CompletableFuture;
  * This service ensures reliable event publishing by:
  * 1. Storing events in the same database transaction as business changes
  * 2. Processing events asynchronously to publish them to the message broker
- * 3. Handling retries and dead letter processing
+ * 3. Handling retries and dead letter processing with exponential backoff
  * 4. Maintaining exactly-once semantics through idempotency
  * 
- * This follows the Single Responsibility Principle by focusing solely on outbox concerns.
+ * Two independent scheduled processors handle different event types:
+ * - Fresh events (retryCount = 0): Processed every ~5 seconds for fast delivery
+ * - Retry events (retryCount > 0): Processed every ~10 seconds with backoff logic
+ * 
+ * This separation prevents race conditions and ensures optimal processing patterns.
  */
 @Service
 @Slf4j
@@ -90,36 +94,39 @@ public class OutboxEventService {
     }
     
     /**
-     * Process unprocessed events from the outbox.
-     * This method runs on a scheduled basis to ensure eventual consistency.
+     * Process fresh (never attempted) events from the outbox.
+     * This method runs on a scheduled basis to handle new events quickly.
+     * Only processes events with retryCount = 0 to avoid overlap with retry processing.
      */
     @Scheduled(fixedDelayString = "${outbox.processing-interval-ms:5000}")
     @Async
     public CompletableFuture<Void> processOutboxEvents() {
         try {
-            List<OutboxEvent> unprocessedEvents = outboxEventRepository
-                .findUnprocessedEvents(PageRequest.of(0, batchSize));
+            List<OutboxEvent> freshEvents = outboxEventRepository
+                .findFreshUnprocessedEvents(PageRequest.of(0, batchSize));
             
-            if (unprocessedEvents.isEmpty()) {
+            if (freshEvents.isEmpty()) {
                 return CompletableFuture.completedFuture(null);
             }
             
-            log.debug("Processing {} unprocessed outbox events", unprocessedEvents.size());
+            log.debug("Processing {} fresh outbox events", freshEvents.size());
             
-            for (OutboxEvent event : unprocessedEvents) {
+            for (OutboxEvent event : freshEvents) {
                 processEvent(event);
             }
             
             return CompletableFuture.completedFuture(null);
             
         } catch (Exception e) {
-            log.error("Error processing outbox events", e);
+            log.error("Error processing fresh outbox events", e);
             return CompletableFuture.failedFuture(e);
         }
     }
     
     /**
-     * Process events that are eligible for retry
+     * Process events that failed previously and are eligible for retry.
+     * This method runs less frequently to handle failed events with exponential backoff.
+     * Only processes events with retryCount > 0 and nextRetryAt <= now to avoid overlap with fresh processing.
      */
     @Scheduled(fixedDelayString = "${outbox.retry-interval-ms:10000}")
     @Async

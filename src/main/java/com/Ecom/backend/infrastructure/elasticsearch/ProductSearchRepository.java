@@ -17,13 +17,31 @@ import java.util.List;
 public interface ProductSearchRepository extends ElasticsearchRepository<ProductDocument, String> {
     
     /**
-     * Find products by name using fuzzy matching
+     * Find products by name using fuzzy matching (simplified)
      */
     @Query("{\"match\": {\"name\": {\"query\": \"?0\", \"fuzziness\": \"AUTO\"}}}")
     Page<ProductDocument> findByNameFuzzy(String name, Pageable pageable);
     
     /**
-     * Multi-field search across name, description, and SKU
+     * Simple fuzzy search on name field only (most reliable)
+     */
+    @Query("{\"fuzzy\": {\"name\": {\"value\": \"?0\", \"fuzziness\": \"AUTO\"}}}")
+    Page<ProductDocument> findByNameSimpleFuzzy(String name, Pageable pageable);
+    
+    /**
+     * Multi-field search across name, description, and SKU with fuzzy matching
+     */
+    @Query("{"
+        + "\"multi_match\": {"
+        + "  \"query\": \"?0\","
+        + "  \"fields\": [\"name^3\", \"description^2\", \"sku^2\"],"
+        + "  \"fuzziness\": \"AUTO\","
+        + "  \"prefix_length\": 1"
+        + "}}")
+    Page<ProductDocument> multiFieldSearchWithFuzzy(String query, Pageable pageable);
+    
+    /**
+     * Exact multi-field search (fallback)
      */
     @Query("{\"multi_match\": {\"query\": \"?0\", \"fields\": [\"name^3\", \"description^2\", \"sku^2\", \"allText\"]}}")
     Page<ProductDocument> multiFieldSearch(String query, Pageable pageable);
@@ -72,9 +90,9 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
     Page<ProductDocument> findRecentProducts(Pageable pageable);
     
     /**
-     * Autocomplete search for product names
+     * Autocomplete search for product names with fuzzy matching
      */
-    @Query("{\"match\": {\"name.suggest\": {\"query\": \"?0\", \"operator\": \"and\"}}}")
+    @Query("{\"multi_match\": {\"query\": \"?0\", \"fields\": [\"name^3\", \"name.suggest^2\"], \"fuzziness\": \"AUTO\", \"prefix_length\": 1, \"type\": \"bool_prefix\"}}")
     List<ProductDocument> autocompleteProductNames(String query);
     
     /**

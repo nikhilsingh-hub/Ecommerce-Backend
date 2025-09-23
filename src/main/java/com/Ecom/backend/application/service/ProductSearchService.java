@@ -85,8 +85,25 @@ public class ProductSearchService {
                 return searchRepository.findAll(pageable);
             }
         } else {
-            // Use multi-field search
-            return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
+            // Try fuzzy search first, fallback to exact if no results
+            try {
+                Page<ProductDocument> fuzzyResults = searchRepository.multiFieldSearchWithFuzzy(searchRequest.getQuery(), pageable);
+                if (fuzzyResults.hasContent()) {
+                    return fuzzyResults;
+                } else {
+                    // Fallback to simple fuzzy search on name
+                    Page<ProductDocument> simpleFuzzy = searchRepository.findByNameSimpleFuzzy(searchRequest.getQuery(), pageable);
+                    if (simpleFuzzy.hasContent()) {
+                        return simpleFuzzy;
+                    } else {
+                        // Last fallback to name-only fuzzy search
+                        return searchRepository.findByNameFuzzy(searchRequest.getQuery(), pageable);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Fuzzy search failed, using exact search: {}", e.getMessage());
+                return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
+            }
         }
     }
     

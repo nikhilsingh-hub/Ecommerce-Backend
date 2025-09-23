@@ -83,6 +83,48 @@ public class ProductController {
     }
     
     @Operation(
+        summary = "Get all products",
+        description = "Retrieves all products with pagination"
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Products retrieved successfully",
+            content = @Content(schema = @Schema(implementation = ProductDto.class))
+        )
+    })
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ProductDto>>> getAllProducts(
+            @Parameter(description = "Page number (0-based)")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "20") Integer size,
+            @Parameter(description = "Sort field")
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @Parameter(description = "Sort direction")
+            @RequestParam(defaultValue = "desc") String sortDirection,
+            HttpServletRequest httpRequest) {
+        
+        log.debug("Getting all products with page: {}, size: {}", page, size);
+        
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDirection) ? 
+            Sort.Direction.ASC : Sort.Direction.DESC;
+        
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        
+        List<ProductDto> products = productService.getAllProducts(pageRequest).getContent();
+        
+        ApiResponse<List<ProductDto>> response = ApiResponse.<List<ProductDto>>builder()
+            .success(true)
+            .message("Products retrieved successfully")
+            .data(products)
+            .path(httpRequest.getRequestURI())
+            .build();
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @Operation(
         summary = "Get product by ID",
         description = "Retrieves a product by its unique identifier and records a view event"
     )

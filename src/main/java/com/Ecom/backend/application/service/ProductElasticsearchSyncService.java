@@ -78,7 +78,7 @@ public class ProductElasticsearchSyncService {
     /**
      * Handle product events from the pub/sub system
      */
-    private void handleProductEvent(Message message) {
+    public void handleProductEvent(Message message) {
         log.debug("Processing product event: {}", message.getEventType());
         
         try {
@@ -94,7 +94,7 @@ public class ProductElasticsearchSyncService {
                 case "ProductCreated" -> handleProductCreated(message);
                 case "ProductUpdated" -> handleProductUpdated(message);
                 case "ProductDeleted" -> handleProductDeleted(message);
-                case "ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
+                case "  ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
                 default -> log.warn("Unknown event type: {}", message.getEventType());
             }
             
@@ -110,13 +110,13 @@ public class ProductElasticsearchSyncService {
     /**
      * Handle ProductCreated event
      */
-    private void handleProductCreated(Message message) {
+    private void  handleProductCreated(Message message) {
         try {
             ProductEvent.ProductCreated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductCreated.class);
             
-            // Fetch full product data from MySQL
-            Optional<Product> product = productRepository.findById(event.getProductId());
+            // Fetch full product data from MySQL with eager loaded categories
+            Optional<Product> product = productRepository.findByIdWithCategories(event.getProductId());
             if (product.isPresent()) {
                 ProductDocument document = ProductDocument.fromProduct(product.get());
                 searchRepository.save(document);
@@ -139,8 +139,8 @@ public class ProductElasticsearchSyncService {
             ProductEvent.ProductUpdated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductUpdated.class);
             
-            // Fetch updated product data from MySQL
-            Optional<Product> product = productRepository.findById(event.getProductId());
+            // Fetch updated product data from MySQL with eager loaded categories
+            Optional<Product> product = productRepository.findByIdWithCategories(event.getProductId());
             if (product.isPresent()) {
                 ProductDocument document = ProductDocument.fromProduct(product.get());
                 searchRepository.save(document);
@@ -182,8 +182,8 @@ public class ProductElasticsearchSyncService {
             String aggregateId = message.getHeaders().get("aggregate-id");
             Long productId = Long.parseLong(aggregateId);
             
-            // Fetch updated product data to get latest metrics
-            Optional<Product> product = productRepository.findById(productId);
+            // Fetch updated product data to get latest metrics with eager loaded categories
+            Optional<Product> product = productRepository.findByIdWithCategories(productId);
             if (product.isPresent()) {
                 ProductDocument document = ProductDocument.fromProduct(product.get());
                 searchRepository.save(document);
@@ -210,7 +210,7 @@ public class ProductElasticsearchSyncService {
             
             while (true) {
                 PageRequest pageRequest = PageRequest.of(page, syncBatchSize);
-                Page<Product> products = productRepository.findAll(pageRequest);
+                Page<Product> products = productRepository.findAllWithCategories(pageRequest);
                 
                 if (products.isEmpty()) {
                     break;
@@ -262,9 +262,8 @@ public class ProductElasticsearchSyncService {
             while (true) {
                 PageRequest pageRequest = PageRequest.of(page, syncBatchSize);
                 
-                // This would need a repository method to find products updated since a timestamp
-                // For now, we'll sync all products in small batches
-                Page<Product> products = productRepository.findAll(pageRequest);
+                // Use JOIN FETCH to eagerly load categories
+                Page<Product> products = productRepository.findAllWithCategories(pageRequest);
                 
                 if (products.isEmpty()) {
                     break;
@@ -310,7 +309,7 @@ public class ProductElasticsearchSyncService {
         log.debug("Syncing specific product: {}", productId);
         
         try {
-            Optional<Product> product = productRepository.findById(productId);
+            Optional<Product> product = productRepository.findByIdWithCategories(productId);
             if (product.isPresent()) {
                 ProductDocument document = ProductDocument.fromProduct(product.get());
                 searchRepository.save(document);

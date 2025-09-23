@@ -1,14 +1,19 @@
 {
   "info": {
     "name": "E-commerce Backend API",
-    "description": "Complete API collection for the E-commerce Backend application demonstrating event-driven architecture, CQRS pattern, and microservices design principles.",
-    "version": "1.0.0",
+    "description": "Complete API collection for the E-commerce Backend application demonstrating event-driven architecture, CQRS pattern, fuzzy search capabilities, and hybrid event publishing (Outbox + Direct). Includes comprehensive Elasticsearch testing, analytics event validation, and error scenarios.",
+    "version": "2.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "elasticsearchUrl",
+      "value": "http://localhost:9200",
       "type": "string"
     }
   ],
@@ -99,6 +104,42 @@
               "path": ["api", "v1", "products", "1"]
             },
             "description": "Delete a product and publish deletion event"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products?page=0&size=20&sortBy=createdAt&sortDirection=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page number (0-based)"
+                },
+                {
+                  "key": "size",
+                  "value": "20",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "description": "Sort field"
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "desc",
+                  "description": "Sort direction"
+                }
+              ]
+            },
+            "description": "Get all products with pagination and sorting"
           },
           "response": []
         }
@@ -443,6 +484,369 @@
         }
       ],
       "description": "Health checks and monitoring endpoints"
+    },
+    {
+      "name": "Elasticsearch Direct APIs",
+      "item": [
+        {
+          "name": "List All Indexes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/_cat/indices?v",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["_cat", "indices"],
+              "query": [
+                {
+                  "key": "v",
+                  "value": null,
+                  "description": "Verbose output"
+                }
+              ]
+            },
+            "description": "List all Elasticsearch indexes with document counts and health status"
+          },
+          "response": []
+        },
+        {
+          "name": "Count Products in ES",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/products/_count",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["products", "_count"]
+            },
+            "description": "Get the count of documents in the products index"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Products from ES",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/products/_search?size=20&pretty",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["products", "_search"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "20",
+                  "description": "Number of documents to return"
+                },
+                {
+                  "key": "pretty",
+                  "value": null,
+                  "description": "Pretty print JSON response"
+                }
+              ]
+            },
+            "description": "Retrieve all products directly from Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product Mapping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/products/_mapping",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["products", "_mapping"]
+            },
+            "description": "Get the mapping/schema of the products index"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Products in ES",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/products/_search?q=headphones&pretty",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["products", "_search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "headphones",
+                  "description": "Query string"
+                },
+                {
+                  "key": "pretty",
+                  "value": null,
+                  "description": "Pretty print JSON response"
+                }
+              ]
+            },
+            "description": "Search products directly in Elasticsearch using query string"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Product from ES",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/products/_doc/1",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["products", "_doc", "1"]
+            },
+            "description": "Get a specific product document by ID from Elasticsearch"
+          },
+          "response": []
+        },
+        {
+          "name": "Cluster Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{elasticsearchUrl}}/_cluster/health",
+              "host": ["{{elasticsearchUrl}}"],
+              "path": ["_cluster", "health"]
+            },
+            "description": "Check Elasticsearch cluster health status"
+          },
+          "response": []
+        }
+      ],
+      "description": "Direct Elasticsearch API calls for debugging and inspection"
+    },
+    {
+      "name": "Fuzzy Search Testing",
+      "item": [
+        {
+          "name": "Search with Typos - Missing Letter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=headphon",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "headphon",
+                  "description": "Missing 'es' from 'headphones'"
+                }
+              ]
+            },
+            "description": "Test fuzzy search with missing letters (headphon -> headphones)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search with Typos - Wrong Letter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=bluetoot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "bluetoot",
+                  "description": "Missing 'h' from 'bluetooth'"
+                }
+              ]
+            },
+            "description": "Test fuzzy search with missing letters (bluetoot -> bluetooth)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search with Typos - Swapped Letters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=hedphones",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hedphones",
+                  "description": "Swapped 'a' with 'e' in 'headphones'"
+                }
+              ]
+            },
+            "description": "Test fuzzy search with swapped letters (hedphones -> headphones)"
+          },
+          "response": []
+        },
+        {
+          "name": "Autocomplete with Typos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/autocomplete?q=wireles&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "autocomplete"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "wireles",
+                  "description": "Missing 's' from 'wireless'"
+                },
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "Maximum suggestions"
+                }
+              ]
+            },
+            "description": "Test autocomplete with fuzzy matching (wireles -> wireless)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Partial Words",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=blue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "blue",
+                  "description": "Partial word should match 'bluetooth'"
+                }
+              ]
+            },
+            "description": "Test partial word matching (blue -> bluetooth)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Test fuzzy search and typo tolerance capabilities"
+    },
+    {
+      "name": "Analytics & Event Testing",
+      "item": [
+        {
+          "name": "Product View with Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1?userId=test-user-analytics&sessionId=session-analytics-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "1"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "test-user-analytics",
+                  "description": "User ID for analytics tracking"
+                },
+                {
+                  "key": "sessionId",
+                  "value": "session-analytics-001",
+                  "description": "Session ID for analytics tracking"
+                }
+              ]
+            },
+            "description": "View product and trigger ProductViewed analytics event (direct publishing)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search with Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/search?q=analytics-test&categories=Electronics&page=0&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "analytics-test",
+                  "description": "Search query for analytics testing"
+                },
+                {
+                  "key": "categories",
+                  "value": "Electronics",
+                  "description": "Category filter"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page number"
+                },
+                {
+                  "key": "size",
+                  "value": "5",
+                  "description": "Page size"
+                }
+              ]
+            },
+            "description": "Perform search and trigger ProductSearchPerformed analytics event (direct publishing)"
+          },
+          "response": []
+        },
+        {
+          "name": "Multiple Product Views",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Simulate multiple product views for analytics testing",
+                  "const userIds = ['user001', 'user002', 'user003'];",
+                  "const productIds = [1, 2, 3];",
+                  "",
+                  "// This test will generate multiple view events",
+                  "pm.test('Product view successful', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/{{$randomInt}}?userId=user-{{$randomInt}}&sessionId=session-{{$timestamp}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "{{$randomInt}}"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user-{{$randomInt}}",
+                  "description": "Random user ID"
+                },
+                {
+                  "key": "sessionId",
+                  "value": "session-{{$timestamp}}",
+                  "description": "Timestamp-based session ID"
+                }
+              ]
+            },
+            "description": "Generate random product view events for analytics testing"
+          },
+          "response": []
+        }
+      ],
+      "description": "Test analytics events and direct publishing functionality"
     },
     {
       "name": "Error Scenarios",
