@@ -1,484 +1,546 @@
-# E-commerce Backend API
+# E-commerce Backend Architecture
 
-A production-minded E-commerce backend application demonstrating event-driven architecture, CQRS pattern, and microservices design principles.
+A production-ready e-commerce backend showcasing **Event-Driven Architecture**, **CQRS**, **Domain-Driven Design**, and **Microservices patterns**. This application demonstrates modern architectural approaches for scalable, maintainable, and resilient systems.
 
-## 🏗️ Architecture Overview
+## 🏗️ Architectural Overview
 
-This application showcases a modern, scalable e-commerce backend with the following key architectural patterns:
+This system implements several key architectural patterns working together:
 
-- **Event-Driven Architecture** with transactional outbox pattern
-- **CQRS (Command Query Responsibility Segregation)** with separate read/write models
-- **Domain-Driven Design (DDD)** with proper layer separation
-- **Microservices-ready** design with replaceable components
-- **Eventual Consistency** between MySQL and Elasticsearch
-- **Pub/Sub Messaging** with batch processing and parallel consumers
+- **🏛️ Domain-Driven Design (DDD)** - Clean layer separation and bounded contexts
+- **📡 Event-Driven Architecture** - Loose coupling through events and messaging
+- **🔄 CQRS Pattern** - Command Query Responsibility Segregation for optimal performance
+- **📦 Transactional Outbox** - Reliable event publishing with guaranteed delivery
+- **🎯 Pub-Sub Messaging** - Asynchronous communication with parallel processing
+- **⚡ Eventual Consistency** - Scalable data synchronization across services
 
-### System Architecture
+---
+
+## 🌍 System Architecture - Bird's Eye View
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   REST API      │    │   GraphQL       │    │   Admin API     │
-│   (Products)    │    │   (Optional)    │    │   (Batch Ops)   │
-└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
-          │                      │                      │
-          └──────────────────────┼──────────────────────┘
-                                 │
-                    ┌─────────────▼─────────────┐
-                    │     Application Layer     │
-                    │  (Services, Use Cases)    │
-                    └─────────────┬─────────────┘
-                                  │
-          ┌───────────────────────┼───────────────────────┐
-          │                       │                       │
-          ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MySQL DB      │    │  Outbox Events  │    │  Elasticsearch  │
-│ (Write Model)   │    │ (Event Store)   │    │  (Read Model)   │
-└─────────────────┘    └─────────┬───────┘    └─────────┬───────┘
-                                 │                       ▲
-                                 ▼                       │
-                    ┌─────────────────────────────────────┤
-                    │        Pub/Sub System               │
-                    │  (In-Memory → Kafka Ready)          │
-                    └─────────────┬───────────────────────┘
-                                  │
-                    ┌─────────────▼─────────────┐
-                    │     Event Consumers       │
-                    │   (Parallel Workers)      │
-                    └───────────────────────────┘
+                           ┌─────────────────────────────────────────────────────────┐
+                           │                    CLIENT LAYER                         │
+                           │  Web Apps  │  Mobile Apps  │  Third-party Integrations │
+                           └─────────────────────┬───────────────────────────────────┘
+                                                 │ HTTP/REST
+                           ┌─────────────────────▼───────────────────────────────────┐
+                           │                PRESENTATION LAYER                       │
+                           │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐   │
+                           │  │   Product   │ │    Admin    │ │     Health      │   │
+                           │  │ Controllers │ │ Controllers │ │   Monitoring    │   │
+                           │  └─────────────┘ └─────────────┘ └─────────────────┘   │
+                           └─────────────────────┬───────────────────────────────────┘
+                                                 │
+                           ┌─────────────────────▼───────────────────────────────────┐
+                           │                APPLICATION LAYER                        │
+                           │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐   │
+                           │  │   Product   │ │   Search    │ │     Outbox      │   │
+                           │  │   Service   │ │   Service   │ │ Event Service   │   │
+                           │  └─────────────┘ └─────────────┘ └─────────────────┘   │
+                           └─────────────────────┬───────────────────────────────────┘
+                                                 │
+    ┌──────────────────────┬─────────────────────┼─────────────────────┬──────────────────────┐
+    │                      │                     │                     │                      │
+    ▼                      ▼                     ▼                     ▼                      ▼
+┌─────────┐         ┌─────────────┐       ┌─────────────┐       ┌─────────────┐         ┌─────────────┐
+│  MySQL  │         │   Outbox    │       │  PubSub     │       │Elasticsearch│         │   Admin     │
+│Database │◄────────┤    Table    ├──────►│  Broker     ├──────►│   Search    │         │  Dashboard  │
+│(Write)  │         │(Event Store)│       │(Message Hub)│       │  (Read)     │         │ (Monitoring)│
+└─────────┘         └─────────────┘       └─────────────┘       └─────────────┘         └─────────────┘
+     │                      │                     │                     │                      │
+     │                      │                     ▼                     │                      │
+     │                      │              ┌─────────────┐              │                      │
+     │                      │              │  Consumer   │              │                      │
+     │                      │              │   Groups    │              │                      │
+     │                      │              │(Parallel    │              │                      │
+     │                      │              │ Workers)    │              │                      │
+     │                      │              └─────────────┘              │                      │
+     │                      │                                           │                      │
+     └──────────────────────┴───────────── Monitoring & Metrics ──────┴──────────────────────┘
+                                         (Prometheus, Grafana, Health Checks)
 ```
 
-### Event Flow
+---
 
-1. **API Request** → Modify MySQL data
-2. **Outbox Event** → Store event in same transaction
-3. **Event Publisher** → Async processing from outbox
-4. **Pub/Sub System** → Distribute events to consumers
-5. **ES Consumer** → Update Elasticsearch index
-6. **Analytics Consumer** → Update metrics and analytics
+## 🏛️ Domain-Driven Design Architecture
 
-## 🚀 Features
-
-### Core Functionality
-- ✅ **Product Management** - CRUD operations with full validation
-- ✅ **Advanced Search** - Elasticsearch-powered with faceting and fuzzy search
-- ✅ **Related Products** - ML-style "More Like This" recommendations
-- ✅ **Analytics Tracking** - View and purchase event tracking
-- ✅ **Real-time Sync** - Eventual consistency between data stores
-
-### Architecture Patterns
-- ✅ **Transactional Outbox** - Reliable event publishing
-- ✅ **Event Sourcing** - Complete audit trail of changes
-- ✅ **CQRS** - Optimized read/write models
-- ✅ **Saga Pattern** - Distributed transaction management
-- ✅ **Circuit Breaker** - Resilience against service failures
-
-### Production Features
-- ✅ **Comprehensive Testing** - Unit, integration, and contract tests
-- ✅ **Observability** - Metrics, logging, and health checks
-- ✅ **API Documentation** - OpenAPI/Swagger with examples
-- ✅ **Docker Support** - Complete containerization
-- ✅ **Configuration Management** - Profile-based configuration
-- ✅ **Error Handling** - Structured error responses
-
-## 🛠️ Technology Stack
-
-### Backend
-- **Java 17** - Modern LTS Java version
-- **Spring Boot 3.5.6** - Latest Spring Boot with native compilation support
-- **Spring Data JPA** - Database abstraction layer
-- **Spring Data Elasticsearch** - Search engine integration
-- **MapStruct** - Type-safe bean mapping
-- **HikariCP** - High-performance connection pooling
-
-### Data Storage
-- **MySQL 8.0** - Primary data store (write model)
-- **Elasticsearch 8.11** - Search engine (read model)
-- **Redis** - Caching and session management (optional)
-
-### Messaging & Events
-- **Custom Pub/Sub** - In-memory message broker (Kafka-ready)
-- **Transactional Outbox** - Reliable event publishing
-- **Batch Processing** - Efficient message handling
-
-### DevOps & Monitoring
-- **Docker & Docker Compose** - Containerization
-- **Prometheus** - Metrics collection
-- **Grafana** - Metrics visualization
-- **Actuator** - Health checks and application metrics
-
-## 🚦 Quick Start
-
-### Prerequisites
-- Java 17 or higher
-- Docker and Docker Compose
-- Git
-
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd EcomBackend
+### Layer Separation
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            PRESENTATION LAYER                                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────────┐ │
+│  │   Controllers   │  │   DTOs/APIs     │  │     Exception Handlers          │ │
+│  │   (REST/HTTP)   │  │  (JSON Models)  │  │    (Error Responses)            │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           APPLICATION LAYER                                    │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────────┐ │
+│  │  Use Cases/     │  │   Mappers       │  │    Event Publishing             │ │
+│  │  Services       │  │ (Entity↔DTO)    │  │   (Outbox Pattern)              │ │
+│  │ (Business Logic)│  │                 │  │                                 │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                             DOMAIN LAYER                                       │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────────┐ │
+│  │    Entities     │  │   Value Objects │  │      Domain Events              │ │
+│  │ (Core Business  │  │   (Immutable    │  │   (Business Events)             │ │
+│  │    Logic)       │  │    Objects)     │  │                                 │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         INFRASTRUCTURE LAYER                                   │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────────┐ │
+│  │  Repositories   │  │   Pub/Sub       │  │    External Services            │ │
+│  │ (Data Access)   │  │  (Messaging)    │  │  (Elasticsearch, Monitoring)    │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Start with Docker (Recommended)
-```bash
-# Windows
-scripts\docker-dev.bat
-
-# Linux/Mac
-chmod +x scripts/docker-dev.sh
-./scripts/docker-dev.sh
-```
-
-This will start all services:
-- **Application**: http://localhost:8080
-- **API Documentation**: http://localhost:8080/swagger-ui.html
-- **Elasticsearch**: http://localhost:9200
-- **Kibana**: http://localhost:5601
-- **Database Admin**: http://localhost:8081
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (admin/admin)
-
-### 3. Manual Setup (Alternative)
-
-#### Start Infrastructure
-```bash
-docker-compose up -d mysql elasticsearch redis
-```
-
-#### Configure Application
-```bash
-# Copy configuration
-cp src/main/resources/application-dev.properties src/main/resources/application.properties
-
-# Update database connection if needed
-# spring.datasource.url=jdbc:mysql://localhost:3306/ecommerce
-```
-
-#### Run Application
-```bash
-# Using Maven
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-
-# Or using IDE
-# Run BackendApplication.java with active profile: dev
-```
-
-## 📊 API Documentation
-
-### Core Endpoints
-
-#### Product Management
-```http
-POST   /api/v1/products              # Create product
-GET    /api/v1/products/{id}         # Get product by ID
-PUT    /api/v1/products/{id}         # Update product
-DELETE /api/v1/products/{id}         # Delete product
-```
-
-#### Search & Discovery
-```http
-GET    /api/v1/products/search       # Advanced search with filters
-GET    /api/v1/products/{id}/related # Get related products
-GET    /api/v1/products/popular      # Get popular products
-GET    /api/v1/products/autocomplete # Autocomplete suggestions
-```
-
-#### Admin Operations
-```http
-POST   /api/v1/admin/publish-batch   # Publish test events
-POST   /api/v1/admin/sync/full       # Trigger full ES sync
-GET    /api/v1/admin/sync/status     # Get sync status
-```
-
-#### Health & Monitoring
-```http
-GET    /api/v1/health                # Basic health check
-GET    /api/v1/health/detailed       # Detailed health info
-GET    /api/v1/health/metrics        # Application metrics
-```
-
-### Example Request
-```bash
-# Create a product
-curl -X POST http://localhost:8080/api/v1/products \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Wireless Bluetooth Headphones",
-    "description": "High-quality wireless headphones with noise cancellation",
-    "categories": ["Electronics", "Audio"],
-    "price": 99.99,
-    "sku": "WBH-001",
-    "attributes": {
-      "color": "black",
-      "battery_life": "30 hours",
-      "noise_cancellation": "active"
-    },
-    "images": [
-      "https://example.com/headphones-1.jpg",
-      "https://example.com/headphones-2.jpg"
-    ]
-  }'
-```
-
-### Example Response
-```json
-{
-  "success": true,
-  "message": "Product created successfully",
-  "data": {
-    "id": 1,
-    "name": "Wireless Bluetooth Headphones",
-    "description": "High-quality wireless headphones with noise cancellation",
-    "categories": ["Electronics", "Audio"],
-    "price": 99.99,
-    "sku": "WBH-001",
-    "attributes": {
-      "color": "black",
-      "battery_life": "30 hours",
-      "noise_cancellation": "active"
-    },
-    "images": [
-      "https://example.com/headphones-1.jpg",
-      "https://example.com/headphones-2.jpg"
-    ],
-    "createdAt": "2024-01-15T10:30:00",
-    "updatedAt": "2024-01-15T10:30:00",
-    "clickCount": 0,
-    "purchaseCount": 0,
-    "popularityScore": 0.0
-  },
-  "timestamp": "2024-01-15T10:30:00",
-  "path": "/api/v1/products"
-}
-```
-
-## 🏛️ Architecture Deep Dive
-
-### Domain-Driven Design
-
-The application follows DDD principles with clear bounded contexts:
-
+### Project Structure
 ```
 src/main/java/com/Ecom/backend/
-├── domain/                    # Domain Layer
-│   └── entity/               # Domain entities with business logic
-├── application/              # Application Layer
-│   ├── dto/                 # Data Transfer Objects
-│   ├── mapper/              # Entity-DTO mappers
-│   └── service/             # Application services
-├── infrastructure/          # Infrastructure Layer
-│   ├── repository/          # Data access
-│   ├── elasticsearch/       # Search integration
-│   └── pubsub/             # Messaging
-└── presentation/           # Presentation Layer
-    ├── controller/         # REST controllers
-    ├── dto/               # API DTOs
-    └── exception/         # Error handling
+├── 📁 domain/                    # 🏛️ Domain Layer
+│   ├── entity/                   # Core business entities
+│   └── event/                    # Domain events
+├── 📁 application/               # 🎯 Application Layer  
+│   ├── dto/                      # Data Transfer Objects
+│   ├── mapper/                   # Entity ↔ DTO mapping
+│   └── service/                  # Use cases & business logic
+├── 📁 infrastructure/            # 🔧 Infrastructure Layer
+│   ├── repository/               # Data persistence
+│   ├── elasticsearch/            # Search engine integration
+│   └── pubsub/                   # Message broker implementation
+└── 📁 presentation/              # 🌐 Presentation Layer
+    ├── controller/               # REST API controllers
+    ├── dto/                      # API request/response models
+    └── exception/                # Error handling & responses
 ```
 
-### Event-Driven Architecture
+---
 
-#### Outbox Pattern Implementation
-The transactional outbox pattern ensures reliable event publishing:
+## 🔄 Event-Driven Architecture
 
-1. **Business Transaction** - Update product data in MySQL
-2. **Event Storage** - Store event in outbox table (same transaction)
-3. **Event Publishing** - Async processor publishes events
-4. **Event Consumption** - Parallel consumers update Elasticsearch
-
-```java
-@Transactional
-public ProductDto createProduct(CreateProductRequest request) {
-    // 1. Save product to database
-    Product product = productRepository.save(mappedProduct);
-    
-    // 2. Store event in outbox (same transaction)
-    outboxEventService.storeEvent(
-        product.getId().toString(),
-        "Product",
-        "ProductCreated",
-        eventData
-    );
-    
-    return productMapper.toDto(product);
-}
+### Transactional Outbox Pattern
+```
+                    API REQUEST PROCESSING FLOW
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  1️⃣ HTTP Request        2️⃣ Business Logic        3️⃣ Database Transaction       │
+│  ┌─────────────┐       ┌─────────────────┐       ┌─────────────────────────┐    │
+│  │   Client    │────►  │  Application    │────►  │      MySQL DB           │    │
+│  │  (POST)     │       │    Service      │       │                         │    │
+│  └─────────────┘       └─────────────────┘       │ ┌─────────────────────┐ │    │
+│                                                  │ │   Product Table     │ │    │
+│                                                  │ │   (INSERT/UPDATE)   │ │    │
+│                                                  │ └─────────────────────┘ │    │
+│                                                  │                         │    │
+│                                                  │ ┌─────────────────────┐ │    │
+│                                                  │ │   Outbox Table      │ │    │
+│                                                  │ │   (Event Storage)   │ │    │
+│                                                  │ └─────────────────────┘ │    │
+│                                                  └─────────────────────────┘    │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼ (ACID Transaction Committed)
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        ASYNCHRONOUS EVENT PROCESSING                           │
+│                                                                                 │
+│  4️⃣ Event Publisher      5️⃣ Pub/Sub Broker        6️⃣ Event Consumers          │
+│  ┌─────────────────┐     ┌─────────────────┐      ┌─────────────────────────┐   │
+│  │   Scheduled     │────►│  Message Broker │─────►│    Consumer Groups      │   │
+│  │   Processor     │     │   (In-Memory)   │      │                         │   │
+│  │  (Every 5sec)   │     │                 │      │ ┌─────────────────────┐ │   │
+│  └─────────────────┘     │ ┌─────────────┐ │      │ │ Elasticsearch Sync  │ │   │
+│                          │ │ product-    │ │      │ │   (2 Workers)       │ │   │
+│                          │ │ events      │ │      │ └─────────────────────┘ │   │
+│                          │ │ topic       │ │      │                         │   │
+│                          │ └─────────────┘ │      │ ┌─────────────────────┐ │   │
+│                          └─────────────────┘      │ │ Analytics Consumer  │ │   │
+│                                                   │ │   (Future)          │ │   │
+│                                                   │ └─────────────────────┘ │   │
+│                                                   └─────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           EVENTUAL CONSISTENCY                                  │
+│                                                                                 │
+│  7️⃣ Data Synchronization                    8️⃣ Search Index Updated            │
+│  ┌─────────────────────────────────┐        ┌─────────────────────────────────┐ │
+│  │         MySQL                   │        │        Elasticsearch            │ │
+│  │    (Source of Truth)            │   ═══► │      (Search Index)             │ │
+│  │                                 │        │                                 │ │
+│  │  Product ID: 123                │        │  Product ID: 123                │ │
+│  │  Name: "New Product"            │        │  Name: "New Product"            │ │
+│  │  Price: $99.99                  │        │  Price: $99.99                  │ │
+│  │  Status: ACTIVE                 │        │  Status: ACTIVE                 │ │
+│  └─────────────────────────────────┘        └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Event Flow
+### Event Types & Flow
 ```
-MySQL Transaction → Outbox Event → Pub/Sub → ES Consumer → Search Index
-                                        ↓
-                                  Analytics Consumer → Metrics
+Domain Events Generated:
+├── 📝 ProductCreated     → Triggers ES indexing
+├── 🔄 ProductUpdated     → Triggers ES re-indexing  
+├── 🗑️ ProductDeleted     → Triggers ES deletion
+├── 👁️ ProductViewed      → Triggers analytics update
+└── 💰 ProductPurchased   → Triggers metrics update
+
+Event Processing Guarantees:
+✅ At-least-once delivery
+✅ Idempotent processing  
+✅ Retry with exponential backoff
+✅ Dead letter queue for failures
+✅ Message ordering preservation
 ```
 
-### CQRS Implementation
+---
 
-- **Command Side (Write)**: MySQL optimized for transactions
-- **Query Side (Read)**: Elasticsearch optimized for search
-- **Synchronization**: Event-driven eventual consistency
+## 📡 Pub-Sub Message Broker Architecture
 
-### Pub/Sub System
+### Broker Internal Design (Kafka-Style)
+```
+                              IN-MEMORY MESSAGE BROKER
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│  TOPIC MANAGEMENT                    CONSUMER GROUP MANAGEMENT                      │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────────────────┐     │
+│  │     Topics Map              │    │      Consumer Groups Map               │     │
+│  │                             │    │                                         │     │
+│  │  "product-events" ───►      │    │  "elasticsearch-sync" ───►             │     │
+│  │  ┌─────────────────────┐    │    │  ┌─────────────────────────────────┐   │     │
+│  │  │   TopicPartition    │    │    │  │     ConsumerGroupState          │   │     │
+│  │  │                     │    │    │  │                                 │   │     │
+│  │  │ offsetGenerator: 47 │    │    │  │ subscribedTopics:               │   │     │
+│  │  │ ┌─────────────────┐ │    │    │  │   ["product-events"]            │   │     │
+│  │  │ │ Message Queue   │ │    │    │  │                                 │   │     │
+│  │  │ │ ┌─────┐ ┌─────┐ │ │    │    │  │ topicOffsets:                   │   │     │
+│  │  │ │ │Msg45│ │Msg46│ │ │    │    │  │   {"product-events": 44}        │   │     │
+│  │  │ │ └─────┘ └─────┘ │ │    │    │  └─────────────────────────────────┘   │     │
+│  │  │ └─────────────────┘ │    │    └─────────────────────────────────────────┘     │
+│  │  └─────────────────────┘    │                                                    │
+│  └─────────────────────────────┘                                                    │
+│                                                                                     │
+│  THREADING MODEL                     OFFSET MANAGEMENT                             │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────────────────┐     │
+│  │ publisherExecutor           │    │    Manual Commit Pattern               │     │
+│  │ (CachedThreadPool)          │    │                                         │     │
+│  │                             │    │ 1️⃣ Consumer polls messages             │     │
+│  │ consumerExecutor            │    │ 2️⃣ Consumer processes batch            │     │
+│  │ (CachedThreadPool)          │    │ 3️⃣ Consumer acknowledges success       │     │
+│  │                             │    │ 4️⃣ Broker commits offset               │     │
+│  │ retryExecutor               │    │ 5️⃣ Next poll starts from new offset   │     │
+│  │ (ScheduledThreadPool)       │    │                                         │     │
+│  └─────────────────────────────┘    └─────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-Custom in-memory pub/sub that mimics Kafka:
-- **Batch Publishing** - Efficient message publishing
-- **Parallel Consumers** - Configurable worker threads
-- **Offset Management** - Message ordering and acknowledgment
-- **Retry Logic** - Exponential backoff and dead letter queues
-- **Kafka Ready** - Easy migration to Apache Kafka
+### Consumer Group Parallel Processing
+```
+                         ELASTICSEARCH SYNC CONSUMER GROUP
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│  WORKER DISTRIBUTION                     MESSAGE PROCESSING FLOW                    │
+│                                                                                     │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────────┐     │
+│  │        Worker-0                 │    │         Worker-1                    │     │
+│  │  ┌─────────────────────────┐    │    │  ┌─────────────────────────────┐    │     │
+│  │  │ consumerExecutor        │    │    │  │ consumerExecutor            │    │     │
+│  │  │ (CachedThreadPool)      │    │    │  │ (CachedThreadPool)          │    │     │
+│  │  │                         │    │    │  │                             │    │     │
+│  │  │ retryExecutor           │    │    │  │ retryExecutor               │    │     │
+│  │  │ (2 threads)             │    │    │  │ (2 threads)                 │    │     │
+│  │  └─────────────────────────┘    │    │  └─────────────────────────────┘    │     │
+│  │                                 │    │                                     │     │
+│  │  Message Processing:            │    │  Message Processing:                │     │
+│  │  ┌─────────────────────────┐    │    │  ┌─────────────────────────────┐    │     │
+│  │  │ 1. Poll messages        │    │    │  │ 1. Poll messages            │    │     │
+│  │  │ 2. handleProductEvent() │    │    │  │ 2. handleProductEvent()     │    │     │
+│  │  │ 3. Update Elasticsearch │    │    │  │ 3. Update Elasticsearch     │    │     │
+│  │  │ 4. Acknowledge success  │    │    │  │ 4. Acknowledge success      │    │     │
+│  │  └─────────────────────────┘    │    │  └─────────────────────────────┘    │     │
+│  └─────────────────────────────────┘    └─────────────────────────────────────┘     │
+│                    │                                        │                       │
+│                    ▼                                        ▼                       │
+│                 Message 1                               Message 2                   │
+│              (ProductCreated)                        (ProductUpdated)               │
+│                    │                                        │                       │
+│                    ▼                                        ▼                       │
+│           ┌─────────────────┐                     ┌─────────────────┐               │
+│           │  Elasticsearch  │◄────────────────────┤  Elasticsearch  │               │
+│           │     Index       │      Parallel       │     Index       │               │
+│           │    Update       │      Updates        │    Update       │               │
+│           └─────────────────┘                     └─────────────────┘               │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-## 🧪 Testing Strategy
+---
 
-### Test Pyramid
-- **Unit Tests** (70%) - Fast, focused tests for business logic
-- **Integration Tests** (20%) - Test component interactions
-- **End-to-End Tests** (10%) - Full system testing
+## 🎯 CQRS Implementation
 
-### Test Categories
+### Command & Query Separation
+```
+                                  CQRS ARCHITECTURE
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│                              COMMAND SIDE (WRITE)                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │                                                                             │   │
+│  │  Write Operations:                    MySQL Database                        │   │
+│  │  ┌─────────────────┐                ┌─────────────────────────────────┐     │   │
+│  │  │ POST /products  │───────────────►│         Products Table          │     │   │
+│  │  │ PUT /products   │                │                                 │     │   │
+│  │  │ DELETE /products│                │ - ACID Transactions             │     │   │
+│  │  └─────────────────┘                │ - Referential Integrity         │     │   │
+│  │                                     │ - Normalized Schema             │     │   │
+│  │  Characteristics:                   │ - Optimized for Writes          │     │   │
+│  │  ✅ Strong Consistency              └─────────────────────────────────┘     │   │
+│  │  ✅ ACID Transactions                                                        │   │
+│  │  ✅ Data Validation                                                          │   │
+│  │  ✅ Business Rules                                                           │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                          │                                         │
+│                                          │ Event Publishing                        │
+│                                          ▼                                         │
+│                              ┌─────────────────────┐                              │
+│                              │    Outbox Events    │                              │
+│                              │   (Event Bridge)    │                              │
+│                              │                     │                              │
+│                              │ ┌─────────────────┐ │                              │
+│                              │ │ ProductCreated  │ │                              │
+│                              │ │ ProductUpdated  │ │                              │
+│                              │ │ ProductDeleted  │ │                              │
+│                              │ └─────────────────┘ │                              │
+│                              └─────────────────────┘                              │
+│                                          │                                         │
+│                                          │ Pub/Sub System                          │
+│                                          ▼                                         │
+│                               QUERY SIDE (READ)                                   │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │                                                                             │   │
+│  │  Read Operations:                   Elasticsearch                           │   │
+│  │  ┌─────────────────┐               ┌─────────────────────────────────┐      │   │
+│  │  │ GET /products   │──────────────►│        Search Index             │      │   │
+│  │  │ GET /search     │               │                                 │      │   │
+│  │  │ GET /related    │               │ - Full-text Search              │      │   │
+│  │  └─────────────────┘               │ - Aggregations & Facets         │      │   │
+│  │                                    │ - Denormalized Documents        │      │   │
+│  │  Characteristics:                  │ - Optimized for Reads           │      │   │
+│  │  ✅ High Performance                └─────────────────────────────────┘      │   │
+│  │  ✅ Complex Queries                                                          │   │
+│  │  ✅ Horizontal Scaling                                                       │   │
+│  │  ✅ Eventual Consistency                                                     │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔧 Technology Stack & Integration
+
+### Infrastructure Components
+```
+                              TECHNOLOGY STACK OVERVIEW
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│  DEVELOPMENT STACK                      RUNTIME ENVIRONMENT                        │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────────┐     │
+│  │                                 │    │                                     │     │
+│  │  ☕ Java 17 (LTS)              │    │  🐳 Docker & Docker Compose       │     │
+│  │  🍃 Spring Boot 3.5.6           │    │  ☸️ Kubernetes Ready              │     │
+│  │  📊 Spring Data JPA             │    │  🔧 HikariCP Connection Pool      │     │
+│  │  🔍 Spring Data Elasticsearch   │    │  ⚡ Native Compilation Support    │     │
+│  │  🗺️ MapStruct (Type-safe)       │    │                                     │     │
+│  │  📝 Lombok (Boilerplate)        │    │                                     │     │
+│  └─────────────────────────────────┘    └─────────────────────────────────────┘     │
+│                                                                                     │
+│  DATA STORAGE                           MESSAGING & EVENTS                         │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────────┐     │
+│  │                                 │    │                                     │     │
+│  │  🗄️ MySQL 8.0 (Primary DB)      │    │  📡 Custom Pub/Sub (Kafka-ready)   │     │
+│  │  🔍 Elasticsearch 8.11 (Search) │    │  📦 Transactional Outbox           │     │
+│  │  🔴 Redis (Cache - Optional)     │    │  🔄 Parallel Message Processing    │     │
+│  │  💾 In-Memory H2 (Testing)       │    │  ♻️ Retry Logic & Dead Letters     │     │
+│  │                                 │    │  🎯 Consumer Groups                 │     │
+│  └─────────────────────────────────┘    └─────────────────────────────────────┘     │
+│                                                                                     │
+│  MONITORING & OBSERVABILITY            API & DOCUMENTATION                         │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────────┐     │
+│  │                                 │    │                                     │     │
+│  │  📈 Prometheus (Metrics)        │    │  📚 OpenAPI 3.0 (Swagger)          │     │
+│  │  📊 Grafana (Dashboards)        │    │  🔗 REST APIs (JSON)               │     │
+│  │  🏥 Spring Actuator (Health)    │    │  🌐 CORS Support                   │     │
+│  │  📝 Structured Logging          │    │  🔒 Security Headers               │     │
+│  │  🔍 Distributed Tracing Ready   │    │  ⚡ Async Processing               │     │
+│  └─────────────────────────────────┘    └─────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Getting Started
+
+### Quick Start
+```bash
+# Clone repository
+git clone <repository-url>
+cd EcomBackend
+
+# Start all services with Docker
+docker-compose up -d
+
+# Access the application
+# 🌐 Application: http://localhost:8080
+# 📚 API Docs: http://localhost:8080/swagger-ui.html
+# 🔍 Elasticsearch: http://localhost:9200
+# 🗄️ Database Admin: http://localhost:8081
+# 📊 Grafana: http://localhost:3000 (admin/admin)
+```
+
+### Service URLs
+```
+🎯 Application Services:
+├── 🌐 Main Application: http://localhost:8080
+├── 📚 API Documentation (Swagger): http://localhost:8080/swagger-ui.html
+├── 🏥 Health Checks: http://localhost:8080/actuator/health
+└── 📊 Metrics: http://localhost:8080/actuator/metrics
+
+🔧 Infrastructure Services:
+├── 🗄️ MySQL Database Admin: http://localhost:8081
+├── 🔍 Elasticsearch: http://localhost:9200
+├── 🔴 Redis: localhost:6379
+├── 📈 Prometheus: http://localhost:9090
+└── 📊 Grafana: http://localhost:3000
+
+📡 API Endpoints:
+├── 📦 Products: /api/v1/products/*
+├── 🔍 Search: /api/v1/products/search
+├── 👑 Admin: /api/v1/admin/*
+└── 🏥 Health: /api/v1/health/*
+```
+
+> **💡 Tip:** All API endpoints and schemas are documented in Swagger UI. Access it at `http://localhost:8080/swagger-ui.html` after starting the application.
+
+---
+
+## 🎯 Key Architecture Benefits
+
+### ✅ **Scalability**
+- Horizontal scaling through stateless design
+- Independent scaling of read/write operations
+- Parallel message processing with worker pools
+- Event-driven architecture reduces coupling
+
+### ✅ **Resilience** 
+- Circuit breaker patterns for external services
+- Retry logic with exponential backoff
+- Dead letter queues for failed messages
+- Health checks and monitoring
+
+### ✅ **Performance**
+- CQRS optimization for reads and writes
+- Elasticsearch for fast search operations
+- Connection pooling and caching
+- Async processing doesn't block APIs
+
+### ✅ **Maintainability**
+- Clean architecture with layer separation
+- Domain-driven design principles
+- Comprehensive testing strategy
+- Type-safe mappings and validations
+
+### ✅ **Observability**
+- Structured logging with correlation IDs
+- Metrics collection and visualization
+- Health checks and monitoring endpoints
+- Event audit trails
+
+---
+
+## 📈 Production Deployment Architecture
+
+```
+                               PRODUCTION DEPLOYMENT
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│                               🌍 INTERNET                                          │
+│                                    │                                               │
+│                                    ▼                                               │
+│                          ┌─────────────────┐                                       │
+│                          │  Load Balancer  │                                       │
+│                          │   (nginx/ALB)   │                                       │
+│                          └─────────────────┘                                       │
+│                                    │                                               │
+│              ┌─────────────────────┼─────────────────────┐                         │
+│              │                     │                     │                         │
+│              ▼                     ▼                     ▼                         │
+│    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐                 │
+│    │   App Instance  │   │   App Instance  │   │   App Instance  │                 │
+│    │      (Pod 1)    │   │      (Pod 2)    │   │      (Pod 3)    │                 │
+│    └─────────────────┘   └─────────────────┘   └─────────────────┘                 │
+│              │                     │                     │                         │
+│              └─────────────────────┼─────────────────────┘                         │
+│                                    │                                               │
+│                                    ▼                                               │
+│                          ┌─────────────────┐                                       │
+│                          │  Message Broker │                                       │
+│                          │ (Apache Kafka)  │                                       │
+│                          └─────────────────┘                                       │
+│                                    │                                               │
+│              ┌─────────────────────┼─────────────────────┐                         │
+│              │                     │                     │                         │
+│              ▼                     ▼                     ▼                         │
+│    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐                 │
+│    │   MySQL DB      │   │  Elasticsearch  │   │   Redis Cache   │                 │
+│    │   (Cluster)     │   │   (Cluster)     │   │   (Cluster)     │                 │
+│    └─────────────────┘   └─────────────────┘   └─────────────────┘                 │
+│                                                                                     │
+│  MONITORING STACK                                                                  │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐                   │
+│  │   Prometheus    │   │    Grafana      │   │   ELK Stack     │                   │
+│  │   (Metrics)     │   │  (Dashboards)   │   │   (Logging)     │                   │
+│  └─────────────────┘   └─────────────────┘   └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🤝 Contributing & Development
+
+### Code Quality Standards
+- **SOLID Principles** implementation
+- **Clean Architecture** patterns  
+- **Test-Driven Development** (TDD)
+- **Domain-Driven Design** (DDD)
+- **Comprehensive Testing** strategy
+
+### Testing Strategy
 ```bash
 # Run all tests
 ./mvnw test
 
-# Run only unit tests
-./mvnw test -Dtest="**/*Test"
+# Architecture tests
+./mvnw test -Dtest="**/*ArchTest"
 
-# Run only integration tests
+# Integration tests  
 ./mvnw test -Dtest="**/*IntegrationTest"
+
+# Performance tests
+./mvnw test -Dtest="**/*PerformanceTest"
 ```
-
-### Key Test Scenarios
-- ✅ **Outbox Pattern** - Event publishing reliability
-- ✅ **Idempotency** - Duplicate message handling
-- ✅ **Retry Logic** - Failure recovery
-- ✅ **Concurrent Access** - Race condition handling
-- ✅ **Event Ordering** - Message sequence preservation
-- ✅ **Database Transactions** - ACID compliance
-
-## 📈 Monitoring & Observability
-
-### Health Checks
-- **Application Health** - Service availability
-- **Database Health** - Connection status
-- **Elasticsearch Health** - Search service status
-- **Pub/Sub Health** - Message system status
-
-### Metrics
-- **Business Metrics** - Product views, purchases, search queries
-- **Technical Metrics** - Response times, error rates, throughput
-- **Infrastructure Metrics** - CPU, memory, database connections
-
-### Logging
-- **Structured Logging** - JSON format with correlation IDs
-- **Log Levels** - Environment-specific logging configuration
-- **Audit Trail** - Complete event history
-
-## 🔧 Configuration
-
-### Environment Profiles
-- **development** - Local development with debug logging
-- **test** - In-memory databases for testing
-- **docker** - Containerized environment
-- **production** - Optimized for production deployment
-
-### Key Configuration Options
-```properties
-# Pub/Sub Configuration
-pubsub.consumer.batch-size=10
-pubsub.consumer.poll-interval-ms=100
-pubsub.consumer.default-worker-count=3
-
-# Outbox Configuration
-outbox.batch-size=50
-outbox.processing-interval-ms=5000
-
-# Elasticsearch Sync
-elasticsearch.sync.batch-size=100
-elasticsearch.sync.consumer-workers=2
-```
-
-## 🚀 Production Deployment
-
-### Recommended Architecture
-```
-Load Balancer → [App Instance 1, App Instance 2, App Instance 3]
-                      ↓
-             [MySQL Cluster] ← → [Redis Cluster]
-                      ↓
-             [Kafka Cluster] → [Elasticsearch Cluster]
-```
-
-### Migration to Kafka
-Replace the in-memory pub/sub with Apache Kafka:
-
-1. **Add Kafka Dependencies**
-```xml
-<dependency>
-    <groupId>org.springframework.kafka</groupId>
-    <artifactId>spring-kafka</artifactId>
-</dependency>
-```
-
-2. **Implement Kafka Adapter**
-```java
-@Component
-public class KafkaMessagePublisher implements MessagePublisher {
-    // Implement using KafkaTemplate
-}
-```
-
-3. **Update Configuration**
-```properties
-spring.kafka.bootstrap-servers=kafka:9092
-spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
-spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer
-```
-
-### Scaling Considerations
-- **Database Sharding** - Partition data across multiple databases
-- **Read Replicas** - Scale read operations
-- **Caching Layer** - Add Redis for frequently accessed data
-- **CDN Integration** - Serve static content from CDN
-- **Auto-scaling** - Configure container orchestration
-
-## 🤝 Contributing
-
-### Development Guidelines
-1. Follow **SOLID principles** and **Clean Architecture**
-2. Write **comprehensive tests** for all new features
-3. Maintain **backward compatibility** in API changes
-4. Use **conventional commits** for version control
-5. Update **documentation** for architectural changes
-
-### Code Quality
-- **SonarQube** integration for code quality metrics
-- **Checkstyle** for coding standards
-- **SpotBugs** for bug detection
-- **JaCoCo** for test coverage
-
-## 📚 Learning Resources
-
-### Architecture Patterns
-- [Microservices Patterns](https://microservices.io/) - Chris Richardson
-- [Building Event-Driven Microservices](https://www.oreilly.com/library/view/building-event-driven-microservices/9781492057888/)
-- [Domain-Driven Design](https://domainlanguage.com/ddd/) - Eric Evans
-
-### Spring Boot & Java
-- [Spring Boot Reference](https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/)
-- [Spring Data JPA](https://spring.io/projects/spring-data-jpa)
-- [Spring Data Elasticsearch](https://spring.io/projects/spring-data-elasticsearch)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For questions and support:
-- **Documentation**: Check this README and code comments
-- **Issues**: Use GitHub Issues for bug reports
-- **Discussions**: Use GitHub Discussions for questions
-- **Email**: Contact the development team at dev@example.com
 
 ---
 
-**Built with ❤️ for learning and demonstrating production-ready architecture patterns.**
+**🏗️ Built with modern architecture patterns for learning and demonstrating production-ready design principles.**
+
+> **📘 For detailed API documentation, start the application and visit:** `http://localhost:8080/swagger-ui.html`

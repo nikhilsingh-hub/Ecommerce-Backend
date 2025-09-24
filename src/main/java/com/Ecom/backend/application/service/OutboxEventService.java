@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
  * 1. Storing events in the same database transaction as business changes
  * 2. Processing events asynchronously to publish them to the message broker
  * 3. Handling retries and dead letter processing with exponential backoff
- * 4. Maintaining exactly-once semantics through idempotency
+ * 4. Maintaining exactly-once semantics i.e each message will be
  * 
  * Two independent scheduled processors handle different event types:
  * - Fresh events (retryCount = 0): Processed every ~5 seconds for fast delivery
@@ -173,7 +173,6 @@ public class OutboxEventService {
             // Publish message asynchronously
             return messagePublisher.publish(message)
                 .thenAccept(publishedMessage -> {
-                    // Mark as processed using separate transaction service
                     outboxTransactionService.markEventAsProcessedAsync(event);
                     log.debug("Successfully published event {} with message ID {}", 
                         event.getId(), publishedMessage.getId());
