@@ -61,12 +61,14 @@ public class InMemoryMessageConsumer implements MessageConsumer {
     public void subscribe(List<String> topics, String consumerGroup) {
         this.consumerGroup = consumerGroup;
         broker.subscribe(consumerGroup, topics);
-        log.info("Subscribed consumer group {} to topics {}", consumerGroup, topics);
+        log.info("✅ [CONSUMER DEBUG] Subscribed consumer group {} to topics {}", consumerGroup, topics);
     }
     
     @Override
     public void setMessageHandler(Consumer<Message> handler) {
         this.messageHandler = handler;
+        log.info("🎯 [CONSUMER DEBUG] Message handler set for consumer group {}, handler: {}", 
+            consumerGroup, handler != null ? handler.getClass().getSimpleName() : "null");
     }
     
     @Override
@@ -76,10 +78,16 @@ public class InMemoryMessageConsumer implements MessageConsumer {
     
     @Override
     public void startConsuming() {
+        log.info("🚀 [CONSUMER DEBUG] Attempting to start consuming for group {}, isConsuming: {}", 
+            consumerGroup, isConsuming.get());
+        
         if (isConsuming.compareAndSet(false, true)) {
+            log.info("🔧 [CONSUMER DEBUG] Creating executor services for group {}", consumerGroup);
+            
             consumerExecutor = Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "consumer-" + consumerGroup);
                 t.setDaemon(true);
+                log.info("📍 [CONSUMER DEBUG] Created consumer thread: {}", t.getName());
                 return t;
             });
             
@@ -89,8 +97,13 @@ public class InMemoryMessageConsumer implements MessageConsumer {
                 return t;
             });
             
+            log.info("🔄 [CONSUMER DEBUG] Starting async consume loop for group {}", consumerGroup);
             consumerTask = CompletableFuture.runAsync(this::consumeLoop, consumerExecutor);
-            log.info("Started consuming for consumer group {}", consumerGroup);
+            
+            log.info("✅ [CONSUMER DEBUG] Started consuming for consumer group {}, handler: {}", 
+                consumerGroup, messageHandler != null ? "SET" : "NULL");
+        } else {
+            log.warn("⚠️ [CONSUMER DEBUG] Consumer group {} already started or failed to start", consumerGroup);
         }
     }
     
@@ -123,22 +136,36 @@ public class InMemoryMessageConsumer implements MessageConsumer {
     }
     
     private void consumeLoop() {
+        log.info("🔄 [CONSUMER DEBUG] Consumer loop STARTED for group {}, thread: {}", 
+            consumerGroup, Thread.currentThread().getName());
+        
+        int pollCount = 0;
         while (isConsuming.get() && !Thread.currentThread().isInterrupted()) {
             try {
+                pollCount++;
+                log.debug("📡 [CONSUMER DEBUG] Polling attempt #{} for group {}", pollCount, consumerGroup);
+                
                 MessageBatch batch = broker.pollMessages(consumerGroup, batchSize);
                 
                 if (!batch.isEmpty()) {
+                    log.info("📬 [CONSUMER DEBUG] Received {} messages for group {} on poll #{}", 
+                        batch.getMessages().size(), consumerGroup, pollCount);
                     processBatch(batch);
                     lastConsumeTimestamp = System.currentTimeMillis();
                 } else {
-                    // No messages available, sleep briefly
+                    if (pollCount % 100 == 0) { // Log every 100 empty polls to avoid spam
+                        log.debug("📭 [CONSUMER DEBUG] No messages on poll #{} for group {}, sleeping {}ms", 
+                            pollCount, consumerGroup, pollIntervalMs);
+                    }
                     Thread.sleep(pollIntervalMs);
                 }
             } catch (InterruptedException e) {
+                log.info("⏹️ [CONSUMER DEBUG] Consumer loop interrupted for group {}", consumerGroup);
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                log.error("Error in consumer loop for group {}", consumerGroup, e);
+                log.error("❌ [CONSUMER DEBUG] Error in consumer loop for group {} on poll #{}", 
+                    consumerGroup, pollCount, e);
                 try {
                     Thread.sleep(pollIntervalMs);
                 } catch (InterruptedException ie) {
@@ -147,24 +174,38 @@ public class InMemoryMessageConsumer implements MessageConsumer {
                 }
             }
         }
+        log.info("🛑 [CONSUMER DEBUG] Consumer loop ENDED for group {}, total polls: {}", 
+            consumerGroup, pollCount);
     }
     
     private void processBatch(MessageBatch batch) {
         long startTime = System.currentTimeMillis();
         
+        log.info("🎭 [CONSUMER DEBUG] Processing batch with {} messages for group {}", 
+            batch.getMessages().size(), consumerGroup);
+        
         try {
             if (batchHandler != null) {
-                // Process entire batch
+                log.info("📦 [CONSUMER DEBUG] Using batch handler for group {}", consumerGroup);
                 batchHandler.accept(batch);
                 acknowledgeBatch(batch);
             } else if (messageHandler != null) {
+                log.info("📄 [CONSUMER DEBUG] Processing {} messages individually for group {}", 
+                    batch.getMessages().size(), consumerGroup);
+                
                 // Process messages individually in parallel
                 List<CompletableFuture<Void>> futures = batch.getMessages().stream()
                     .map(message -> CompletableFuture.runAsync(() -> {
                         try {
+                            log.debug("🔍 [CONSUMER DEBUG] Processing message {} of type {} for group {}", 
+                                message.getId(), message.getEventType(), consumerGroup);
                             messageHandler.accept(message);
                             acknowledge(message);
+                            log.debug("✅ [CONSUMER DEBUG] Successfully processed message {} for group {}", 
+                                message.getId(), consumerGroup);
                         } catch (Exception e) {
+                            log.error("❌ [CONSUMER DEBUG] Failed to process message {} for group {}", 
+                                message.getId(), consumerGroup, e);
                             handleMessageFailure(message, e);
                         }
                     }, consumerExecutor))
@@ -172,6 +213,9 @@ public class InMemoryMessageConsumer implements MessageConsumer {
                 
                 // Wait for all messages in batch to complete
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                log.info("🏁 [CONSUMER DEBUG] Completed processing batch for group {}", consumerGroup);
+            } else {
+                log.error("⚠️ [CONSUMER DEBUG] No handler set for group {} - skipping batch", consumerGroup);
             }
             
             totalBatchesConsumed.incrementAndGet();

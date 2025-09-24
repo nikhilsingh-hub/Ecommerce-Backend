@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,7 +105,7 @@ public class OutboxEventService {
         try {
             List<OutboxEvent> freshEvents = outboxEventRepository
                 .findFreshUnprocessedEvents(PageRequest.of(0, batchSize));
-            
+            System.out.println("freshEvents Fetched: "+ freshEvents);
             if (freshEvents.isEmpty()) {
                 return CompletableFuture.completedFuture(null);
             }

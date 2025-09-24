@@ -94,7 +94,7 @@ public class ProductElasticsearchSyncService {
                 case "ProductCreated" -> handleProductCreated(message);
                 case "ProductUpdated" -> handleProductUpdated(message);
                 case "ProductDeleted" -> handleProductDeleted(message);
-                case "  ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
+                case "ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
                 default -> log.warn("Unknown event type: {}", message.getEventType());
             }
             

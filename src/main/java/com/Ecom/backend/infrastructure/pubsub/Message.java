@@ -1,7 +1,7 @@
 package com.Ecom.backend.infrastructure.pubsub;
 
 import lombok.Builder;
-import lombok.Data;
+import lombok.Value;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -10,7 +10,7 @@ import java.util.Map;
  * Represents a message in the pub/sub system.
  * Immutable value object following DDD principles.
  */
-@Data
+@Value
 @Builder
 public class Message {
     
