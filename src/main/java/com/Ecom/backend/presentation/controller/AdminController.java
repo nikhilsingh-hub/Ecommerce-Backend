@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.Builder;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -102,7 +104,7 @@ public class AdminController {
         log.info("Triggering full Elasticsearch sync");
         
         try {
-            CompletableFuture<Void> syncFuture = syncService.performFullSync();
+            syncService.performFullSync();
             
             SyncResponse response = SyncResponse.builder()
                 .syncType("full")
@@ -248,8 +250,8 @@ public class AdminController {
     /**
      * Response DTO for batch publish operations
      */
-    @lombok.Data
-    @lombok.Builder
+    @Data
+    @Builder
     public static class BatchPublishResponse {
         private String topic;
         private Integer messageCount;
@@ -258,100 +260,11 @@ public class AdminController {
         private String lastMessageId;
     }
     
-    @Operation(
-        summary = "Get sync status",
-        description = "Get current sync status between MySQL and Elasticsearch"
-    )
-    @GetMapping("/sync/status")
-    public ResponseEntity<ApiResponse<ProductElasticsearchSyncService.SyncStats>> getSyncStatus(HttpServletRequest httpRequest) {
-        try {
-            ProductElasticsearchSyncService.SyncStats stats = syncService.getSyncStats();
-            
-            ApiResponse<ProductElasticsearchSyncService.SyncStats> response = 
-                ApiResponse.<ProductElasticsearchSyncService.SyncStats>builder()
-                    .success(true)
-                    .message("Sync status retrieved")
-                    .data(stats)
-                    .path(httpRequest.getRequestURI())
-                    .build();
-                    
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Failed to get sync status", e);
-            
-            ApiResponse<ProductElasticsearchSyncService.SyncStats> response = 
-                ApiResponse.<ProductElasticsearchSyncService.SyncStats>builder()
-                    .success(false)
-                    .message("Failed to get sync status: " + e.getMessage())
-                    .path(httpRequest.getRequestURI())
-                    .build();
-                    
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
-    
-    @Operation(
-        summary = "Sync specific product",
-        description = "Manually sync a specific product by ID to Elasticsearch"
-    )
-    @PostMapping("/sync/product/{productId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> syncSpecificProduct(
-            @PathVariable Long productId, 
-            HttpServletRequest httpRequest) {
-        try {
-            log.info("Syncing specific product: {}", productId);
-            
-            // Get stats before
-            ProductElasticsearchSyncService.SyncStats beforeStats = syncService.getSyncStats();
-            
-            // Sync specific product (non-async method)
-            syncService.syncProduct(productId);
-            
-            // Get stats after
-            ProductElasticsearchSyncService.SyncStats afterStats = syncService.getSyncStats();
-            
-            Map<String, Object> result = Map.of(
-                "productId", productId,
-                "before", Map.of(
-                    "mysql", beforeStats.mysqlProductCount(),
-                    "elasticsearch", beforeStats.elasticsearchProductCount()
-                ),
-                "after", Map.of(
-                    "mysql", afterStats.mysqlProductCount(),
-                    "elasticsearch", afterStats.elasticsearchProductCount()
-                ),
-                "synced", afterStats.elasticsearchProductCount() - beforeStats.elasticsearchProductCount()
-            );
-            
-            ApiResponse<Map<String, Object>> response = ApiResponse.<Map<String, Object>>builder()
-                .success(true)
-                .message("Product sync completed successfully")
-                .data(result)
-                .path(httpRequest.getRequestURI())
-                .build();
-                
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Product sync failed for ID: {}", productId, e);
-            
-            ApiResponse<Map<String, Object>> response = ApiResponse.<Map<String, Object>>builder()
-                .success(false)
-                .message("Product sync failed: " + e.getMessage())
-                .data(Map.of("productId", productId, "error", e.getMessage()))
-                .path(httpRequest.getRequestURI())
-                .build();
-                
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
-
     /**
      * Response DTO for sync operations
      */
-    @lombok.Data
-    @lombok.Builder
+    @Data
+    @Builder
     public static class SyncResponse {
         private String syncType;
         private String status;

@@ -84,7 +84,7 @@ public class ProductDocument {
     private Double popularityScore;
     
     // Additional fields for search optimization
-    @Field(type = FieldType.Text, analyzer = "keyword")
+    @Field(type = FieldType.Text, analyzer = "product_search")
     private String allText; // Combined searchable text
     
     @Field(type = FieldType.Keyword)

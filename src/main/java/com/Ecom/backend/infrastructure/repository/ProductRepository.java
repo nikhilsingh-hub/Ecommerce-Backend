@@ -122,6 +122,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     /**
      * Find product by ID with eagerly loaded categories
+     * Note: Other collections (attributes, images) will be loaded within transaction context
      */
     @Query("SELECT p FROM Product p LEFT JOIN FETCH p.categories WHERE p.id = :id")
     Optional<Product> findByIdWithCategories(@Param("id") Long id);

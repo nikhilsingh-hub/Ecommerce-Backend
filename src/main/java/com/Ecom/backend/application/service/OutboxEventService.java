@@ -105,7 +105,7 @@ public class OutboxEventService {
         try {
             List<OutboxEvent> freshEvents = outboxEventRepository
                 .findFreshUnprocessedEvents(PageRequest.of(0, batchSize));
-            System.out.println("freshEvents Fetched: "+ freshEvents);
+            
             if (freshEvents.isEmpty()) {
                 return CompletableFuture.completedFuture(null);
             }

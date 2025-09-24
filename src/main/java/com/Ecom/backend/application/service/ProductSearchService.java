@@ -14,10 +14,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -42,7 +38,6 @@ public class ProductSearchService {
     private final ProductSearchRepository searchRepository;
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
-    private final ElasticsearchOperations elasticsearchOperations;
     
     /**
      * Perform advanced product search with filters and pagination
@@ -85,23 +80,20 @@ public class ProductSearchService {
                 return searchRepository.findAll(pageable);
             }
         } else {
-            // Try fuzzy search first, fallback to exact if no results
+            // Use simple autocomplete fuzzy search
             try {
-                Page<ProductDocument> fuzzyResults = searchRepository.multiFieldSearchWithFuzzy(searchRequest.getQuery(), pageable);
-                if (fuzzyResults.hasContent()) {
-                    return fuzzyResults;
+                Page<ProductDocument> autocompleteResults = searchRepository.autocompleteFuzzySearch(searchRequest.getQuery(), pageable);
+                if (autocompleteResults.hasContent()) {
+                    log.debug("Autocomplete fuzzy search found {} results for query: {}", 
+                        autocompleteResults.getTotalElements(), searchRequest.getQuery());
+                    return autocompleteResults;
                 } else {
-                    // Fallback to simple fuzzy search on name
-                    Page<ProductDocument> simpleFuzzy = searchRepository.findByNameSimpleFuzzy(searchRequest.getQuery(), pageable);
-                    if (simpleFuzzy.hasContent()) {
-                        return simpleFuzzy;
-                    } else {
-                        // Last fallback to name-only fuzzy search
-                        return searchRepository.findByNameFuzzy(searchRequest.getQuery(), pageable);
-                    }
+                    // Fallback to exact search if no fuzzy results
+                    log.debug("No autocomplete results found, falling back to exact search for query: {}", searchRequest.getQuery());
+                    return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
                 }
             } catch (Exception e) {
-                log.warn("Fuzzy search failed, using exact search: {}", e.getMessage());
+                log.warn("Autocomplete fuzzy search failed, using exact search: {}", e.getMessage());
                 return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
             }
         }

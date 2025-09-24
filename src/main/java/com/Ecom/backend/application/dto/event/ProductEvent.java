@@ -1,8 +1,10 @@
 package com.Ecom.backend.application.dto.event;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -20,6 +22,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductCreated extends ProductEvent {
         private Long productId;
@@ -42,6 +46,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductUpdated extends ProductEvent {
         private Long productId;
@@ -68,6 +74,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductDeleted extends ProductEvent {
         private Long productId;
@@ -86,6 +94,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductViewed extends ProductEvent {
         private Long productId;
@@ -105,6 +115,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductPurchased extends ProductEvent {
         private Long productId;
@@ -126,6 +138,8 @@ public abstract class ProductEvent {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @lombok.EqualsAndHashCode(callSuper=false)
     public static class ProductInventoryChanged extends ProductEvent {
         private Long productId;

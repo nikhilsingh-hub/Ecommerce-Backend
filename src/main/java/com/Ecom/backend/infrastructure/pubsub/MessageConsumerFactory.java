@@ -21,7 +21,6 @@ import java.util.function.Consumer;
 public class MessageConsumerFactory {
     
     private final ApplicationContext applicationContext;
-    private final InMemoryMessageBroker broker;
     
     @Value("${pubsub.consumer.default-worker-count:3}")
     private int defaultWorkerCount;
@@ -43,27 +42,23 @@ public class MessageConsumerFactory {
             int workerCount,
             Consumer<Message> messageHandler) {
         
-        log.info("🏗️ [FACTORY DEBUG] Creating consumer group {} with {} workers for topics {}", 
+        log.info("Creating consumer group {} with {} workers for topics {}", 
             consumerGroupId, workerCount, topics);
-        log.info("🎯 [FACTORY DEBUG] Message handler provided: {}", 
-            messageHandler != null ? messageHandler.getClass().getSimpleName() : "null");
         
         List<MessageConsumer> consumers = new ArrayList<>();
         
         for (int i = 0; i < workerCount; i++) {
             String workerId = consumerGroupId + "-worker-" + i;
-            log.info("🔧 [FACTORY DEBUG] Creating worker {} for group {}", workerId, consumerGroupId);
             
-            InMemoryMessageConsumer consumer = new InMemoryMessageConsumer(broker);
+            InMemoryMessageConsumer consumer = applicationContext.getBean(InMemoryMessageConsumer.class);
             consumer.subscribe(topics, workerId);
             consumer.setMessageHandler(messageHandler);
             
             consumers.add(consumer);
-            log.info("✅ [FACTORY DEBUG] Worker {} created and configured", workerId);
         }
         
         consumerGroups.put(consumerGroupId, consumers);
-        log.info("🎉 [FACTORY DEBUG] Created consumer group {} with {} workers for topics {}", 
+        log.info("Created consumer group {} with {} workers for topics {}", 
             consumerGroupId, workerCount, topics);
         
         return consumers;
@@ -87,7 +82,7 @@ public class MessageConsumerFactory {
         List<MessageConsumer> consumers = new ArrayList<>();
         
         for (int i = 0; i < workerCount; i++) {
-            InMemoryMessageConsumer consumer = new InMemoryMessageConsumer(broker);
+            InMemoryMessageConsumer consumer = applicationContext.getBean(InMemoryMessageConsumer.class);
             String workerId = consumerGroupId + "-batch-worker-" + i;
             
             consumer.subscribe(topics, workerId);
@@ -117,23 +112,13 @@ public class MessageConsumerFactory {
      * Start all consumers in a consumer group
      */
     public void startConsumerGroup(String consumerGroupId) {
-        log.info("🚀 [FACTORY DEBUG] Starting consumer group: {}", consumerGroupId);
-        
         List<MessageConsumer> consumers = consumerGroups.get(consumerGroupId);
         if (consumers != null) {
-            log.info("🔍 [FACTORY DEBUG] Found {} consumers to start for group {}", 
-                consumers.size(), consumerGroupId);
-            
-            consumers.forEach(consumer -> {
-                log.info("▶️ [FACTORY DEBUG] Starting individual consumer for group {}", consumerGroupId);
-                consumer.startConsuming();
-            });
-            
-            log.info("✅ [FACTORY DEBUG] Started consumer group {} with {} workers", 
+            consumers.forEach(MessageConsumer::startConsuming);
+            log.info("Started consumer group {} with {} workers", 
                 consumerGroupId, consumers.size());
         } else {
-            log.error("❌ [FACTORY DEBUG] Consumer group not found: {}", consumerGroupId);
-            log.info("🔍 [FACTORY DEBUG] Available consumer groups: {}", consumerGroups.keySet());
+            log.error("Consumer group not found: {}", consumerGroupId);
             throw new IllegalArgumentException("Consumer group not found: " + consumerGroupId);
         }
     }
