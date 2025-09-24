@@ -113,7 +113,7 @@ public class ProductElasticsearchSyncService {
     /**
      * Handle ProductCreated event
      */
-    private void  handleProductCreated(Message message) {
+    public void handleProductCreated(Message message) {
         try {
             ProductEvent.ProductCreated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductCreated.class);
@@ -153,23 +153,36 @@ public class ProductElasticsearchSyncService {
     /**
      * Handle ProductUpdated event
      */
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    private void handleProductUpdated(Message message) {
+    public void handleProductUpdated(Message message) {
         try {
             ProductEvent.ProductUpdated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductUpdated.class);
             
-            // Fetch updated product data from MySQL with all collections safely loaded  
-            Optional<Product> product = findProductWithAllCollections(event.getProductId());
-            if (product.isPresent()) {
-                ProductDocument document = ProductDocument.fromProduct(product.get());
-                searchRepository.save(document);
-                log.debug("Updated product {} in Elasticsearch", event.getProductId());
-            } else {
-                log.warn("Product {} not found in MySQL for update", event.getProductId());
-                // Product might have been deleted, remove from Elasticsearch
-                searchRepository.deleteById(event.getProductId().toString());
-            }
+            // Create ProductDocument directly from event data - no database fetch needed!
+            ProductDocument document = ProductDocument.builder()
+                .id(event.getProductId().toString())
+                .productId(event.getProductId())
+                .name(event.getName())
+                .description(event.getDescription())
+                .categories(event.getCategories())
+                .price(event.getPrice())
+                .sku(event.getSku())
+                .attributes(event.getAttributes())
+                .images(event.getImages())
+                .createdAt(null) // We don't have createdAt in update events, ES will preserve existing value
+                .updatedAt(event.getUpdatedAt())
+                .clickCount(null) // Preserve existing analytics data in Elasticsearch
+                .purchaseCount(null) // Preserve existing analytics data in Elasticsearch
+                .popularityScore(null) // Preserve existing analytics data in Elasticsearch
+                .allText(buildAllTextFromEvent(event))
+                .tags(generateTagsFromEvent(event))
+                .inStock(true) // Assume updated products are in stock
+                .priceRange(calculatePriceRange(event.getPrice()))
+                .scoreBoost(1.0) // Default boost
+                .build();
+
+            searchRepository.save(document);
+            log.debug("Updated product {} in Elasticsearch from event data", event.getProductId());
             
         } catch (Exception e) {
             log.error("Failed to handle ProductUpdated event", e);
@@ -180,7 +193,7 @@ public class ProductElasticsearchSyncService {
     /**
      * Handle ProductDeleted event
      */
-    private void handleProductDeleted(Message message) {
+    public void handleProductDeleted(Message message) {
         try {
             ProductEvent.ProductDeleted event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductDeleted.class);
@@ -198,7 +211,7 @@ public class ProductElasticsearchSyncService {
      * Handle analytics events (view, purchase) to update metrics
      */
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    private void handleProductAnalyticsEvent(Message message) {
+    public void handleProductAnalyticsEvent(Message message) {
         try {
             String aggregateId = message.getHeaders().get("aggregate-id");
             Long productId = Long.parseLong(aggregateId);
@@ -462,6 +475,61 @@ public class ProductElasticsearchSyncService {
         }
         
         return tags.stream().distinct().collect(java.util.stream.Collectors.toList());
+    }
+    
+    /**
+     * Build searchable text from ProductUpdated event data
+     */
+    private String buildAllTextFromEvent(ProductEvent.ProductUpdated event) {
+        StringBuilder allText = new StringBuilder();
+        
+        if (event.getName() != null) {
+            allText.append(event.getName()).append(" ");
+        }
+        if (event.getDescription() != null) {
+            allText.append(event.getDescription()).append(" ");
+        }
+        if (event.getSku() != null) {
+            allText.append(event.getSku()).append(" ");
+        }
+        if (event.getCategories() != null) {
+            allText.append(String.join(" ", event.getCategories())).append(" ");
+        }
+        if (event.getAttributes() != null) {
+            event.getAttributes().forEach((key, value) -> 
+                allText.append(key).append(" ").append(value).append(" "));
+        }
+        
+        return allText.toString().trim();
+    }
+    
+    /**
+     * Generate tags from ProductUpdated event data
+     */
+    private List<String> generateTagsFromEvent(ProductEvent.ProductUpdated event) {
+        List<String> tags = new ArrayList<>();
+        
+        // Add categories as tags
+        if (event.getCategories() != null) {
+            tags.addAll(event.getCategories());
+        }
+        
+        // Add brand as tag if available
+        if (event.getAttributes() != null && event.getAttributes().containsKey("brand")) {
+            tags.add(event.getAttributes().get("brand"));
+        }
+        
+        // Add price-based tags
+        if (event.getPrice() != null) {
+            double priceValue = event.getPrice().doubleValue();
+            if (priceValue < 100) {
+                tags.add("budget");
+            } else if (priceValue > 500) {
+                tags.add("premium");
+            }
+        }
+        
+        return tags;
     }
     
     /**

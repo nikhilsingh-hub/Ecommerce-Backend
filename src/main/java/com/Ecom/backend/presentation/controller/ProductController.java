@@ -229,7 +229,7 @@ public class ProductController {
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "204",
+            responseCode = "200",
             description = "Product deleted successfully"
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -239,15 +239,25 @@ public class ProductController {
         )
     })
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteProduct(
+    public ResponseEntity<ApiResponse<String>> deleteProduct(
             @Parameter(description = "Product ID", required = true)
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
         
         log.info("Deleting product with ID: {}", id);
         
         try {
             productService.deleteProduct(id);
-            return ResponseEntity.noContent().build();
+            
+            ApiResponse<String> response = ApiResponse.<String>builder()
+                .success(true)
+                .message("Product deleted successfully")
+                .data("Product with ID " + id + " has been deleted")
+                .path(httpRequest.getRequestURI())
+                .timestamp(java.time.LocalDateTime.now())
+                .build();
+                
+            return ResponseEntity.ok(response);
             
         } catch (IllegalArgumentException e) {
             throw new com.Ecom.backend.presentation.exception.ProductNotFoundException(e.getMessage());
