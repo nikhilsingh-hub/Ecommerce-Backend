@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.OptimisticLockException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -121,47 +122,53 @@ public class ProductService {
     public ProductDto updateProduct(Long productId, UpdateProductRequest request) {
         log.debug("Updating product with ID: {}", productId);
         
-        Product existingProduct = productRepository.findById(productId)
-            .orElseThrow(() -> new IllegalArgumentException("Product not found with ID: " + productId));
-        
-        // Check SKU uniqueness if SKU is being updated
-        if (request.getSku() != null && !request.getSku().equals(existingProduct.getSku())) {
-            if (productRepository.existsBySku(request.getSku())) {
-                throw new IllegalArgumentException("Product with SKU " + request.getSku() + " already exists");
+        try {
+            Product existingProduct = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found with ID: " + productId));
+            
+            // Check SKU uniqueness if SKU is being updated
+            if (request.getSku() != null && !request.getSku().equals(existingProduct.getSku())) {
+                if (productRepository.existsBySku(request.getSku())) {
+                    throw new IllegalArgumentException("Product with SKU " + request.getSku() + " already exists");
+                }
             }
+            
+            // Store previous values for event
+            String previousName = existingProduct.getName();
+            BigDecimal previousPrice = existingProduct.getPrice();
+            
+            // Update entity
+            productMapper.updateEntity(existingProduct, request);
+            Product updatedProduct = productRepository.save(existingProduct);
+            
+            // Publish event through outbox pattern
+            ProductEvent.ProductUpdated event = ProductEvent.ProductUpdated.builder()
+                .productId(updatedProduct.getId())
+                .name(updatedProduct.getName())
+                .description(updatedProduct.getDescription())
+                .categories(updatedProduct.getCategories())
+                .price(updatedProduct.getPrice())
+                .sku(updatedProduct.getSku())
+                .attributes(updatedProduct.getAttributes())
+                .images(updatedProduct.getImages())
+                .updatedAt(updatedProduct.getUpdatedAt())
+                .updatedBy("system") // In real app, this would come from security context
+                .build();
+            
+            outboxEventService.storeEvent(
+                updatedProduct.getId().toString(),
+                "Product",
+                "ProductUpdated",
+                event
+            );
+        
+            log.info("Updated product {} with ID {}", updatedProduct.getSku(), updatedProduct.getId());
+            return productMapper.toDto(updatedProduct);
+            
+        } catch (OptimisticLockException e) {
+            log.warn("Concurrent update detected for product ID: {}. Another transaction modified this product.", productId);
+            throw new IllegalArgumentException("Product was modified by another process. Please refresh and try again.");
         }
-        
-        // Store previous values for event
-        String previousName = existingProduct.getName();
-        BigDecimal previousPrice = existingProduct.getPrice();
-        
-        // Update entity
-        productMapper.updateEntity(existingProduct, request);
-        Product updatedProduct = productRepository.save(existingProduct);
-        
-        // Publish event through outbox pattern
-        ProductEvent.ProductUpdated event = ProductEvent.ProductUpdated.builder()
-            .productId(updatedProduct.getId())
-            .name(updatedProduct.getName())
-            .description(updatedProduct.getDescription())
-            .categories(updatedProduct.getCategories())
-            .price(updatedProduct.getPrice())
-            .sku(updatedProduct.getSku())
-            .attributes(updatedProduct.getAttributes())
-            .images(updatedProduct.getImages())
-            .updatedAt(updatedProduct.getUpdatedAt())
-            .updatedBy("system") // In real app, this would come from security context
-            .build();
-        
-        outboxEventService.storeEvent(
-            updatedProduct.getId().toString(),
-            "Product",
-            "ProductUpdated",
-            event
-        );
-        
-        log.info("Updated product {} with ID {}", updatedProduct.getSku(), updatedProduct.getId());
-        return productMapper.toDto(updatedProduct);
     }
     
     /**

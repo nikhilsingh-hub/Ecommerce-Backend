@@ -69,6 +69,9 @@ public class Product {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Version
+    private Long version;
+
     // Popularity metrics for related products algorithm
     @Column(nullable = false)
     @Builder.Default
