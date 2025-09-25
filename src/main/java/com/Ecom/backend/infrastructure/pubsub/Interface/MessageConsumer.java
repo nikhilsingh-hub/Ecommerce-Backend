@@ -1,4 +1,7 @@
-package com.Ecom.backend.infrastructure.pubsub;
+package com.Ecom.backend.infrastructure.pubsub.Interface;
+
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
+import com.Ecom.backend.infrastructure.pubsub.DTO.MessageBatch;
 
 import java.util.List;
 import java.util.function.Consumer;

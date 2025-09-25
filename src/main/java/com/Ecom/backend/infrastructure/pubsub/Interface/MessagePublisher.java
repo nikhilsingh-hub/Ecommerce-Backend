@@ -1,4 +1,6 @@
-package com.Ecom.backend.infrastructure.pubsub;
+package com.Ecom.backend.infrastructure.pubsub.Interface;
+
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;

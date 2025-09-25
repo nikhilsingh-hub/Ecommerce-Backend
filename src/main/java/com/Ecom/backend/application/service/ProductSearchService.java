@@ -10,6 +10,7 @@ import com.Ecom.backend.infrastructure.elasticsearch.ProductSearchRepository;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +39,9 @@ public class ProductSearchService {
     private final ProductSearchRepository searchRepository;
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    
+    @Value("${product.search.popularity-threshold:10.0}")
+    private Double popularityThreshold;
     
     /**
      * Perform advanced product search with filters and pagination
@@ -238,7 +242,7 @@ public class ProductSearchService {
         
         try {
             Pageable pageable = PageRequest.of(0, limit);
-            Page<ProductDocument> popularProducts = searchRepository.findByPopularityScoreGreaterThan(10.0, pageable);
+            Page<ProductDocument> popularProducts = searchRepository.findByPopularityScoreGreaterThan(popularityThreshold, pageable);
             
             return popularProducts.getContent().stream()
                 .map(this::convertDocumentToDto)

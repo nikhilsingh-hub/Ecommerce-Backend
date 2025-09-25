@@ -98,7 +98,7 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
     /**
      * Find similar products using More Like This query
      */
-    @Query("{\"more_like_this\": {\"fields\": [\"name\", \"description\", \"categories\"], \"like\": [{\"_id\": \"?0\"}], \"min_term_freq\": 1, \"max_query_terms\": 12}}")
+    @Query("{\"more_like_this\": {\"fields\": [\"name\", \"description\", \"categories\"], \"like\": [{\"_index\": \"products\", \"_id\": \"?0\"}], \"min_term_freq\": 1, \"min_doc_freq\": 1, \"max_query_terms\": \"50\"}}")
     Page<ProductDocument> findSimilarProducts(String productId, Pageable pageable);
     
     /**

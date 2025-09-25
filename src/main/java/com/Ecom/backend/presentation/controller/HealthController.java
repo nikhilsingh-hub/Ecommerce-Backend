@@ -2,8 +2,8 @@ package com.Ecom.backend.presentation.controller;
 
 import com.Ecom.backend.application.service.OutboxEventService;
 import com.Ecom.backend.application.service.ProductElasticsearchSyncService;
-import com.Ecom.backend.infrastructure.pubsub.InMemoryMessageBroker;
-import com.Ecom.backend.infrastructure.pubsub.MessagePublisher;
+import com.Ecom.backend.infrastructure.pubsub.Broker.InMemoryMessageBroker;
+import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import com.Ecom.backend.presentation.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;

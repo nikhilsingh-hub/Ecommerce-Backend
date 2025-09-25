@@ -1,7 +1,7 @@
 package com.Ecom.backend.application.eventListeners;
 
 import com.Ecom.backend.application.eventListeners.Interface.BaseEventListener;
-import com.Ecom.backend.infrastructure.pubsub.Message;
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

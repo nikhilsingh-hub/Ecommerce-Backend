@@ -1,8 +1,10 @@
 package com.Ecom.backend.presentation.controller;
 
+import com.Ecom.backend.application.dto.event.ProductEvent;
 import com.Ecom.backend.application.service.ProductElasticsearchSyncService;
-import com.Ecom.backend.infrastructure.pubsub.Message;
-import com.Ecom.backend.infrastructure.pubsub.MessagePublisher;
+import com.Ecom.backend.application.service.OutboxEventService;
+import com.Ecom.backend.domain.entity.OutboxEvent;
+import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;
 import com.Ecom.backend.presentation.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,12 +16,10 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Admin controller for management and testing operations.
@@ -34,47 +34,60 @@ public class AdminController {
     
     private final MessagePublisher messagePublisher;
     private final ProductElasticsearchSyncService syncService;
+    private final OutboxEventService outboxEventService;
     
     @Operation(
-        summary = "Publish batch messages",
-        description = "Publish a batch of test messages to the pub/sub system for testing purposes"
+        summary = "Store batch product events in outbox",
+        description = "Store a batch of product events in the outbox table for reliable processing via the Transactional Outbox Pattern"
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "200",
-            description = "Batch published successfully"
+            description = "Product batch stored in outbox successfully"
         )
     })
     @PostMapping("/publish-batch")
+    @Transactional
     public ResponseEntity<ApiResponse<BatchPublishResponse>> publishBatch(
-            @Parameter(description = "Topic to publish to")
-            @RequestParam(defaultValue = "test-events") String topic,
-            @Parameter(description = "Number of messages to publish")
+            @Parameter(description = "Number of product events to create")
             @RequestParam(defaultValue = "10") Integer messageCount,
             @Parameter(description = "Event type for the messages")
-            @RequestParam(defaultValue = "TestEvent") String eventType,
+            @RequestParam(defaultValue = "ProductCreated") String eventType,
             HttpServletRequest httpRequest) {
         
-        log.info("Publishing batch of {} messages to topic {}", messageCount, topic);
+        log.info("Storing batch of {} product events in outbox", messageCount);
         
         try {
-            List<Message> messages = generateTestMessages(topic, eventType, messageCount);
+            List<ProductEvent.ProductCreated> eventDataList = generateProductEventData(eventType, messageCount);
+            List<OutboxEvent> storedEvents = new java.util.ArrayList<>();
             
-            CompletableFuture<List<Message>> publishFuture = messagePublisher.publishBatch(messages);
-            List<Message> publishedMessages = publishFuture.get(); // Block for demo purposes
+            // Store each event in the outbox table
+            for (int i = 0; i < eventDataList.size(); i++) {
+                ProductEvent.ProductCreated eventData = eventDataList.get(i);
+                String aggregateId = "product-" + eventData.getProductId();
+                
+                OutboxEvent storedEvent = outboxEventService.storeEvent(
+                    aggregateId,
+                    "Product", 
+                    eventType,
+                    eventData
+                );
+                storedEvents.add(storedEvent);
+            }
             
             BatchPublishResponse response = BatchPublishResponse.builder()
-                .topic(topic)
-                .messageCount(publishedMessages.size())
+                .topic("product-events")
+                .messageCount(storedEvents.size())
                 .eventType(eventType)
-                .firstMessageId(publishedMessages.isEmpty() ? null : publishedMessages.get(0).getId())
-                .lastMessageId(publishedMessages.isEmpty() ? null : 
-                    publishedMessages.get(publishedMessages.size() - 1).getId())
+                .firstEventId(storedEvents.isEmpty() ? null : storedEvents.get(0).getId())
+                .lastEventId(storedEvents.isEmpty() ? null : 
+                    storedEvents.get(storedEvents.size() - 1).getId())
+                .storedInOutbox(true)
                 .build();
             
             ApiResponse<BatchPublishResponse> apiResponse = ApiResponse.<BatchPublishResponse>builder()
                 .success(true)
-                .message("Batch published successfully")
+                .message("Product batch stored in outbox successfully - events will be processed asynchronously")
                 .data(response)
                 .path(httpRequest.getRequestURI())
                 .build();
@@ -82,8 +95,8 @@ public class AdminController {
             return ResponseEntity.ok(apiResponse);
             
         } catch (Exception e) {
-            log.error("Failed to publish batch", e);
-            throw new RuntimeException("Failed to publish batch: " + e.getMessage());
+            log.error("Failed to store batch in outbox", e);
+            throw new RuntimeException("Failed to store product batch in outbox: " + e.getMessage());
         }
     }
     
@@ -229,20 +242,33 @@ public class AdminController {
     }
     
     /**
-     * Generate test messages for batch publishing
+     * Generate product event data for batch storing in outbox
      */
-    private List<Message> generateTestMessages(String topic, String eventType, int count) {
+    private List<ProductEvent.ProductCreated> generateProductEventData(String eventType, int count) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        
         return java.util.stream.IntStream.range(0, count)
             .mapToObj(i -> {
-                Map<String, String> headers = new HashMap<>();
-                headers.put("test-message", "true");
-                headers.put("batch-index", String.valueOf(i));
-                
-                String payload = String.format(
-                    "{\"messageNumber\": %d, \"timestamp\": \"%s\", \"data\": \"test-data-%d\"}", 
-                    i, java.time.LocalDateTime.now(), i);
-                
-                return Message.create(topic, eventType, payload, headers, "test-key-" + i);
+                long productId = System.currentTimeMillis() + i;
+                return ProductEvent.ProductCreated.builder()
+                    .productId(productId)
+                    .name("Sample Product " + (i + 1))
+                    .description("This is a sample product created for testing batch operations - Product " + (i + 1))
+                    .categories(java.util.List.of("Electronics", "Sample"))
+                    .price(new java.math.BigDecimal("99.99").add(new java.math.BigDecimal(i)))
+                    .sku("SAMPLE-" + String.format("%04d", i + 1))
+                    .attributes(java.util.Map.of(
+                        "brand", "SampleBrand",
+                        "model", "Model-" + (i + 1),
+                        "color", i % 2 == 0 ? "Black" : "White"
+                    ))
+                    .images(java.util.List.of(
+                        "https://example.com/images/product-" + (i + 1) + "-1.jpg",
+                        "https://example.com/images/product-" + (i + 1) + "-2.jpg"
+                    ))
+                    .createdAt(now.plusSeconds(i))
+                    .createdBy("admin-batch-operation")
+                    .build();
             })
             .toList();
     }
@@ -256,8 +282,9 @@ public class AdminController {
         private String topic;
         private Integer messageCount;
         private String eventType;
-        private String firstMessageId;
-        private String lastMessageId;
+        private Long firstEventId;
+        private Long lastEventId;
+        private Boolean storedInOutbox;
     }
     
     /**

@@ -1,8 +1,8 @@
 package com.Ecom.backend.application.service;
 
 import com.Ecom.backend.domain.entity.OutboxEvent;
-import com.Ecom.backend.infrastructure.pubsub.Message;
-import com.Ecom.backend.infrastructure.pubsub.MessagePublisher;
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
+import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;
 import com.Ecom.backend.infrastructure.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

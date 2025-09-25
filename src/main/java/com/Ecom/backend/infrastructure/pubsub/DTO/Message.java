@@ -1,4 +1,4 @@
-package com.Ecom.backend.infrastructure.pubsub;
+package com.Ecom.backend.infrastructure.pubsub.DTO;
 
 import lombok.Builder;
 import lombok.Value;

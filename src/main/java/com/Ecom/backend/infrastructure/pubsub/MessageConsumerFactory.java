@@ -1,5 +1,8 @@
 package com.Ecom.backend.infrastructure.pubsub;
 
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
+import com.Ecom.backend.infrastructure.pubsub.DTO.MessageBatch;
+import com.Ecom.backend.infrastructure.pubsub.Interface.MessageConsumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

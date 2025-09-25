@@ -1,6 +1,6 @@
 package com.Ecom.backend.application.eventListeners.Interface;
 
-import com.Ecom.backend.infrastructure.pubsub.Message;
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 
 import java.util.List;
 

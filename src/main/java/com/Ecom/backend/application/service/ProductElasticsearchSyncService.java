@@ -4,7 +4,7 @@ import com.Ecom.backend.application.dto.event.ProductEvent;
 import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductDocument;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductSearchRepository;
-import com.Ecom.backend.infrastructure.pubsub.Message;
+import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
