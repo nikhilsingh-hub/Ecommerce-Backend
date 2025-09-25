@@ -15,7 +15,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.UpdateQuery;
-import org.springframework.data.elasticsearch.core.script.Script;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -227,32 +226,23 @@ public class ProductElasticsearchSyncService {
         try {
             // Build Elasticsearch script for server-side atomic updates
             StringBuilder script = new StringBuilder();
-            Map<String, Object> params = new HashMap<>();
             
             if (updates.containsKey("clickCount")) {
-                script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + params.clickIncrement; ");
-                params.put("clickIncrement", 1);
+                script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + 1; ");
             }
             
             if (updates.containsKey("purchaseCount")) {
-                script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + params.purchaseIncrement; ");
-                params.put("purchaseIncrement", 1);
+                script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + 1; ");
             }
             
             // Recalculate popularity score server-side
             script.append("long clicks = ctx._source.clickCount ?: 0; ");
             script.append("long purchases = ctx._source.purchaseCount ?: 0; ");
             script.append("ctx._source.popularityScore = (clicks * 1.0) + (purchases * 10.0);");
-            
-            // TRUE atomic update - single call to Elasticsearch
-            Script updateScript = Script.builder()
-                .withSource(script.toString())
-                .withParams(params)
-                .build();
-                
+
             UpdateQuery updateQuery = UpdateQuery.builder(productId)
-                .withScript(updateScript)
-                .withRetryOnConflict(3)  // Handle concurrent updates
+                .withScript(script.toString())
+                .withRetryOnConflict(3)
                 .build();
             
             IndexCoordinates index = IndexCoordinates.of("products");
