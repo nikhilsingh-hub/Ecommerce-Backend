@@ -44,7 +44,7 @@ REM Simple wait (Windows doesn't have a great way to check service health easily
 echo ⌛ Waiting 2 minutes for services to start...
 timeout /t 120 /nobreak
 
-echo 🎉 Development environment should be ready!
+echo Development environment should be ready!
 echo.
 echo 📋 Service URLs:
 echo    🔗 Application:     http://localhost:8080
@@ -57,11 +57,10 @@ echo    📈 Prometheus:      http://localhost:9090
 echo    📊 Grafana:         http://localhost:3000 (admin/admin)
 echo.
 echo 💡 Useful commands:
-echo    📜 View logs:       docker-compose logs -f [service_name]
-echo    🔄 Restart app:     docker-compose restart app
-echo    🛑 Stop all:        docker-compose down
-echo    🧹 Clean up:        docker-compose down -v
+echo    View logs:       docker-compose logs -f [service_name]
+echo    Restart app:     docker-compose restart app
+echo    Stop all:        docker-compose down
+echo    Clean up:        docker-compose down -v
 echo.
-echo 🚀 Happy coding!
 
 pause

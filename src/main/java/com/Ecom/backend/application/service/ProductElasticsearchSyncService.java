@@ -54,36 +54,14 @@ public class ProductElasticsearchSyncService {
     
     @Value("${elasticsearch.sync.consumer-workers:2}")
     private int consumerWorkers;
-    
-    private List<MessageConsumer> consumers;
-    
-    /**
-     * Initialize consumers after application startup
-     */
-    @EventListener(ApplicationReadyEvent.class)
-    public void initializeConsumers() {
-        log.info("Initializing Elasticsearch sync consumers");
-        
-        // Create consumer group for product events
-        consumers = consumerFactory.createConsumerGroup(
-            "elasticsearch-sync",
-            List.of("product-events"),
-            consumerWorkers,
-            this::handleProductEvent
-        );
-        
-        // Start consuming
-        consumerFactory.startConsumerGroup("elasticsearch-sync");
-        
-        log.info("Elasticsearch sync consumers started with {} workers", consumerWorkers);
-    }
-    
+
+
     /**
      * Handle product events from the pub/sub system
      */
     public void handleProductEvent(Message message) {
         log.debug("Processing product event: {}", message.getEventType());
-        
+
         try {
             // Check idempotency
             String idempotencyKey = message.getHeaders().get("idempotency-key");
@@ -91,7 +69,7 @@ public class ProductElasticsearchSyncService {
                 log.debug("Event {} already processed, skipping", idempotencyKey);
                 return;
             }
-            
+
             // Process based on event type
             switch (message.getEventType()) {
                 case "ProductCreated" -> handleProductCreated(message);
@@ -100,16 +78,16 @@ public class ProductElasticsearchSyncService {
                 case "ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
                 default -> log.warn("Unknown event type: {}", message.getEventType());
             }
-            
+
             // Mark as processed (in real implementation, store in cache/database)
             markAsProcessed(idempotencyKey);
-            
+
         } catch (Exception e) {
             log.error("Failed to process product event {}: {}", message.getId(), e.getMessage(), e);
             throw new RuntimeException("Event processing failed", e);
         }
     }
-    
+
     /**
      * Handle ProductCreated event
      */
@@ -117,7 +95,7 @@ public class ProductElasticsearchSyncService {
         try {
             ProductEvent.ProductCreated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductCreated.class);
-            
+
             // Create ProductDocument directly from event data - no database fetch needed!
             ProductDocument document = ProductDocument.builder()
                 .id(event.getProductId().toString())
@@ -132,7 +110,7 @@ public class ProductElasticsearchSyncService {
                 .createdAt(event.getCreatedAt())
                 .updatedAt(event.getCreatedAt()) // Same as created for new products
                 .clickCount(0L) // New product starts with 0
-                .purchaseCount(0L) // New product starts with 0  
+                .purchaseCount(0L) // New product starts with 0
                 .popularityScore(0.0) // New product starts with 0
                 .allText(buildAllTextFromEvent(event))
                 .tags(generateTagsFromEvent(event))
@@ -140,16 +118,16 @@ public class ProductElasticsearchSyncService {
                 .priceRange(calculatePriceRange(event.getPrice()))
                 .scoreBoost(1.0) // Default boost for new products
                 .build();
-                
+
             searchRepository.save(document);
             log.debug("Indexed new product {} in Elasticsearch from event data", event.getProductId());
-            
+
         } catch (Exception e) {
             log.error("Failed to handle ProductCreated event", e);
             throw new RuntimeException("Failed to process ProductCreated event", e);
         }
     }
-    
+
     /**
      * Handle ProductUpdated event
      */
@@ -157,7 +135,7 @@ public class ProductElasticsearchSyncService {
         try {
             ProductEvent.ProductUpdated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductUpdated.class);
-            
+
             // Create ProductDocument directly from event data - no database fetch needed!
             ProductDocument document = ProductDocument.builder()
                 .id(event.getProductId().toString())
@@ -183,13 +161,13 @@ public class ProductElasticsearchSyncService {
 
             searchRepository.save(document);
             log.debug("Updated product {} in Elasticsearch from event data", event.getProductId());
-            
+
         } catch (Exception e) {
             log.error("Failed to handle ProductUpdated event", e);
             throw new RuntimeException("Failed to process ProductUpdated event", e);
         }
     }
-    
+
     /**
      * Handle ProductDeleted event
      */
@@ -197,16 +175,16 @@ public class ProductElasticsearchSyncService {
         try {
             ProductEvent.ProductDeleted event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductDeleted.class);
-            
+
             searchRepository.deleteById(event.getProductId().toString());
             log.debug("Deleted product {} from Elasticsearch", event.getProductId());
-            
+
         } catch (Exception e) {
             log.error("Failed to handle ProductDeleted event", e);
             throw new RuntimeException("Failed to process ProductDeleted event", e);
         }
     }
-    
+
     /**
      * Handle analytics events (view, purchase) to update metrics
      */
@@ -261,12 +239,9 @@ public class ProductElasticsearchSyncService {
             if (products.isEmpty()) {
                 break;
             }
-            
-            // Convert and save to Elasticsearch
-            // Collections are safely accessible within transaction context
+
             List<ProductDocument> documents = products.getContent().stream()
                 .map(product -> {
-                    // Force initialization of lazy collections within transaction
                     initializeProductCollections(product);
                     return ProductDocument.fromProduct(product);
                 })
@@ -562,17 +537,6 @@ public class ProductElasticsearchSyncService {
     private void markAsProcessed(String idempotencyKey) {
         // For demo purposes, do nothing
         // In production, store in cache or database with TTL
-    }
-    
-    /**
-     * Cleanup resources
-     */
-    @PreDestroy
-    public void cleanup() {
-        if (consumers != null) {
-            consumers.forEach(MessageConsumer::close);
-        }
-        log.info("Elasticsearch sync service cleanup completed");
     }
     
     /**
