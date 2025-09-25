@@ -14,7 +14,6 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: --default-authentication-plugin=mysql_native_password
     networks:
       - ecommerce-network
@@ -22,8 +21,8 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 10s
       retries: 5
-      interval: 30s
-      start_period: 60s
+      interval: 10s
+      start_period: 30s
 
   # Elasticsearch
   elasticsearch:
@@ -32,11 +31,9 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - xpack.security.enrollment.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
     ports:
       - "9200:9200"
-      - "9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
@@ -45,8 +42,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       timeout: 10s
       retries: 5
-      interval: 30s
-      start_period: 60s
+      interval: 10s
+      start_period: 30s
 
   # E-commerce Backend Application
   app:
@@ -54,13 +51,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ecommerce-backend
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: ecommerce_user
-      SPRING_DATASOURCE_PASSWORD: ecommerce_pass
-      SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
-      JAVA_OPTS: "-Xmx1g -Xms512m"
     ports:
       - "8080:8080"
     depends_on:
@@ -68,19 +58,26 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ecommerce_user
+      SPRING_DATASOURCE_PASSWORD: ecommerce_pass
+      SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
     networks:
       - ecommerce-network
-    volumes:
-      - app_logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
-      timeout: 10s
-      retries: 3
-      interval: 30s
-      start_period: 120s
 
-  # Redis (optional - can be used for caching and session management)
+  # Database Admin Tool (optional - for viewing data)
+  adminer:
+    image: adminer:4.8.1
+    container_name: ecommerce-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      - mysql
+    networks:
+      - ecommerce-network
+
+  # Redis (for caching and session management)
   redis:
     image: redis:7-alpine
     container_name: ecommerce-redis
@@ -91,11 +88,6 @@ services:
       - redis_data:/data
     networks:
       - ecommerce-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      timeout: 10s
-      retries: 3
-      interval: 30s
 
   # Prometheus (for metrics collection)
   prometheus:
@@ -104,19 +96,13 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=15d'
     networks:
       - ecommerce-network
-    depends_on:
-      - app
 
   # Grafana (for metrics visualization)
   grafana:
@@ -129,26 +115,15 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - ecommerce-network
-    depends_on:
-      - prometheus
 
 volumes:
   mysql_data:
-    driver: local
   elasticsearch_data:
-    driver: local
   redis_data:
-    driver: local
   prometheus_data:
-    driver: local
   grafana_data:
-    driver: local
-  app_logs:
-    driver: local
 
 networks:
   ecommerce-network:

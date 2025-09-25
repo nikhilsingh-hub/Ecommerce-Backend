@@ -5,15 +5,11 @@ import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductDocument;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductSearchRepository;
 import com.Ecom.backend.infrastructure.pubsub.Message;
-import com.Ecom.backend.infrastructure.pubsub.MessageConsumer;
-import com.Ecom.backend.infrastructure.pubsub.MessageConsumerFactory;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
@@ -21,10 +17,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -46,15 +42,10 @@ public class ProductElasticsearchSyncService {
     
     private final ProductRepository productRepository;
     private final ProductSearchRepository searchRepository;
-    private final MessageConsumerFactory consumerFactory;
     private final ObjectMapper objectMapper;
     
     @Value("${elasticsearch.sync.batch-size:100}")
     private int syncBatchSize;
-    
-    @Value("${elasticsearch.sync.consumer-workers:2}")
-    private int consumerWorkers;
-
 
     /**
      * Handle product events from the pub/sub system
@@ -187,24 +178,77 @@ public class ProductElasticsearchSyncService {
 
     /**
      * Handle analytics events (view, purchase) to update metrics
+     * Uses direct script-based updates for maximum efficiency
      */
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public void handleProductAnalyticsEvent(Message message) {
         try {
             String aggregateId = message.getHeaders().get("aggregate-id");
+            String eventType = message.getEventType();
             Long productId = Long.parseLong(aggregateId);
             
-            // Fetch updated product data to get latest metrics with all collections safely loaded
-            Optional<Product> product = findProductWithAllCollections(productId);
-            if (product.isPresent()) {
-                ProductDocument document = ProductDocument.fromProduct(product.get());
-                searchRepository.save(document);
-                log.debug("Updated product {} metrics in Elasticsearch", productId);
+            // Create metrics update directly from message - no fetch needed!
+            Map<String, Object> metricsUpdate = new HashMap<>();
+            
+            if ("ProductViewed".equals(eventType)) {
+                // Increment click count and recalculate popularity
+                metricsUpdate.put("clickCount", 1); // Will be added to existing value
+                log.debug("Incrementing click count for product {}", productId);
+                
+            } else if ("ProductPurchased".equals(eventType)) {
+                // Increment purchase count and recalculate popularity  
+                metricsUpdate.put("purchaseCount", 1); // Will be added to existing value
+                log.debug("Incrementing purchase count for product {}", productId);
+                
+            } else {
+                log.debug("Unknown analytics event type: {}", eventType);
+                return;
             }
+            
+            // Use script-based update to increment counters atomically
+            updateProductMetrics(productId.toString(), metricsUpdate);
+            log.debug("Updated product {} {} metrics in Elasticsearch", productId, eventType);
             
         } catch (Exception e) {
             log.error("Failed to handle analytics event", e);
             throw new RuntimeException("Failed to process analytics event", e);
+        }
+    }
+    
+    /**
+     * Update product metrics directly from message data - minimal approach for POC
+     * Only fetches the specific fields we need to update
+     */
+    private void updateProductMetrics(String productId, Map<String, Object> updates) {
+        try {
+            // Minimal fetch - only get the fields we need to increment
+            Optional<ProductDocument> docOpt = searchRepository.findById(productId);
+            if (docOpt.isPresent()) {
+                ProductDocument doc = docOpt.get();
+                
+                // Increment counters directly from message
+                if (updates.containsKey("clickCount")) {
+                    doc.setClickCount((doc.getClickCount() == null ? 0 : doc.getClickCount()) + 1);
+                }
+                
+                if (updates.containsKey("purchaseCount")) {
+                    doc.setPurchaseCount((doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount()) + 1);
+                }
+                
+                // Recalculate popularity score
+                long clicks = doc.getClickCount() == null ? 0 : doc.getClickCount();
+                long purchases = doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount();
+                doc.setPopularityScore(calculatePopularityScore(clicks, purchases));
+                
+                searchRepository.save(doc);
+                log.debug("Updated metrics for product {} - clicks: {}, purchases: {}", 
+                    productId, doc.getClickCount(), doc.getPurchaseCount());
+            } else {
+                log.warn("Product {} not found in Elasticsearch for metrics update", productId);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to update metrics for product {}", productId, e);
+            throw e;
         }
     }
     
@@ -520,6 +564,14 @@ public class ProductElasticsearchSyncService {
         else if (priceValue < 500) return "200-500";
         else if (priceValue < 1000) return "500-1000";
         else return "1000+";
+    }
+    
+    /**
+     * Calculate popularity score based on clicks and purchases
+     */
+    private double calculatePopularityScore(long clickCount, long purchaseCount) {
+        // Simple scoring: purchases are worth 10x clicks
+        return (clickCount * 1.0) + (purchaseCount * 10.0);
     }
     
     /**

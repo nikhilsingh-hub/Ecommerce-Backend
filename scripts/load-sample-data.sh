@@ -72,7 +72,7 @@ create_product \
     "Wireless Bluetooth Headphones" \
     "Premium wireless headphones with active noise cancellation and 30-hour battery life" \
     "[\"Electronics\", \"Audio\", \"Headphones\"]" \
-    "199.99" \
+    "299.99" \
     "WBH-001" \
     "{\"color\": \"black\", \"battery_life\": \"30 hours\", \"noise_cancellation\": \"active\", \"wireless\": \"true\"}" \
     "[\"https://images.unsplash.com/photo-1505740420928-5e560c06d30e\", \"https://images.unsplash.com/photo-1484704849700-f032a568e944\"]"

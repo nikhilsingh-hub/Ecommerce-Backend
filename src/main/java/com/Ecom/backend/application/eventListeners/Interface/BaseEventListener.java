@@ -1,12 +1,6 @@
-package com.Ecom.backend.application.event;
+package com.Ecom.backend.application.eventListeners.Interface;
 
 import com.Ecom.backend.infrastructure.pubsub.Message;
-import com.Ecom.backend.infrastructure.pubsub.MessageConsumer;
-import com.Ecom.backend.infrastructure.pubsub.MessageConsumerFactory;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 
 import java.util.List;
 
@@ -16,7 +10,7 @@ import java.util.List;
  */
 public interface BaseEventListener {
     
-    public List<MessageConsumer> createConsumers();
+    public void createConsumers();
     
     /**
      * Handle incoming messages
