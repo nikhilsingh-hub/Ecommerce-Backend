@@ -3,7 +3,7 @@ package com.Ecom.backend.application.eventListeners;
 import com.Ecom.backend.Enums.ConsumerGroupEnums;
 import com.Ecom.backend.Enums.TopicEnum;
 import com.Ecom.backend.application.eventListeners.Interface.BaseEventListener;
-import com.Ecom.backend.application.service.ProductElasticsearchSyncService;
+import com.Ecom.backend.application.service.ProductService.ProductElasticsearchSyncService ;
 import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 import com.Ecom.backend.infrastructure.pubsub.Interface.MessageConsumer;
 import com.Ecom.backend.infrastructure.pubsub.MessageConsumerFactory;

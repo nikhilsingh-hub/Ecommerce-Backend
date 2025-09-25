@@ -63,6 +63,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ecommerce_user
       SPRING_DATASOURCE_PASSWORD: ecommerce_pass
       SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redis_password_123
     networks:
       - ecommerce-network
 
@@ -83,7 +86,7 @@ services:
     container_name: ecommerce-redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass redis_password_123
     volumes:
       - redis_data:/data
     networks:

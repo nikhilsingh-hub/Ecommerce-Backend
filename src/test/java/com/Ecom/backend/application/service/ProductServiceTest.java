@@ -4,6 +4,8 @@ import com.Ecom.backend.application.dto.CreateProductRequest;
 import com.Ecom.backend.application.dto.ProductDto;
 import com.Ecom.backend.application.dto.UpdateProductRequest;
 import com.Ecom.backend.application.mapper.ProductMapper;
+import com.Ecom.backend.application.service.OutboxService.OutboxEventService;
+import com.Ecom.backend.application.service.ProductService.ProductService;
 import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;

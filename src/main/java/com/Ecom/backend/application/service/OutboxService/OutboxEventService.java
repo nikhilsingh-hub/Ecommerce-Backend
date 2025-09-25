@@ -1,4 +1,4 @@
-package com.Ecom.backend.application.service;
+package com.Ecom.backend.application.service.OutboxService;
 
 import com.Ecom.backend.domain.entity.OutboxEvent;
 import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
@@ -99,14 +99,13 @@ public class OutboxEventService {
      * Only processes events with retryCount = 0 to avoid overlap with retry processing.
      */
     @Scheduled(fixedDelayString = "${outbox.processing-interval-ms:5000}")
-    @Async
-    public CompletableFuture<Void> processOutboxEvents() {
+    public void processOutboxEvents() {
         try {
             List<OutboxEvent> freshEvents = outboxEventRepository
                 .findFreshUnprocessedEvents(PageRequest.of(0, batchSize));
             
             if (freshEvents.isEmpty()) {
-                return CompletableFuture.completedFuture(null);
+                return;
             }
             
             log.debug("Processing {} fresh outbox events", freshEvents.size());
@@ -115,11 +114,9 @@ public class OutboxEventService {
                 processEvent(event);
             }
             
-            return CompletableFuture.completedFuture(null);
-            
         } catch (Exception e) {
             log.error("Error processing fresh outbox events", e);
-            return CompletableFuture.failedFuture(e);
+            // Don't rethrow - scheduled tasks should handle exceptions gracefully
         }
     }
     
@@ -129,14 +126,13 @@ public class OutboxEventService {
      * Only processes events with retryCount > 0 and nextRetryAt <= now to avoid overlap with fresh processing.
      */
     @Scheduled(fixedDelayString = "${outbox.retry-interval-ms:10000}")
-    @Async
-    public CompletableFuture<Void> processRetryableEvents() {
+    public void processRetryableEvents() {
         try {
             List<OutboxEvent> retryableEvents = outboxEventRepository
                 .findEventsForRetry(LocalDateTime.now(), PageRequest.of(0, batchSize));
             
             if (retryableEvents.isEmpty()) {
-                return CompletableFuture.completedFuture(null);
+                return;
             }
             
             log.debug("Processing {} retryable outbox events", retryableEvents.size());
@@ -145,11 +141,9 @@ public class OutboxEventService {
                 processEvent(event);
             }
             
-            return CompletableFuture.completedFuture(null);
-            
         } catch (Exception e) {
             log.error("Error processing retryable outbox events", e);
-            return CompletableFuture.failedFuture(e);
+            // Don't rethrow - scheduled tasks should handle exceptions gracefully
         }
     }
     

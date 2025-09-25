@@ -1,4 +1,4 @@
-package com.Ecom.backend.application.service;
+package com.Ecom.backend.application.service.ProductService;
 
 import com.Ecom.backend.application.dto.event.ProductEvent;
 import com.Ecom.backend.domain.entity.Product;
@@ -194,14 +194,32 @@ public class ProductElasticsearchSyncService {
             Map<String, Object> metricsUpdate = new HashMap<>();
             
             if ("ProductViewed".equals(eventType)) {
-                // Increment click count and recalculate popularity
-                metricsUpdate.put("clickCount", 1); // Will be added to existing value
-                log.debug("Incrementing click count for product {}", productId);
+                // Handle ProductViewed events - check if it's from Redis sync or real-time
+                Long incrementValue = extractViewIncrement(message);
+                Long totalViews = extractTotalViews(message);
+                
+                if (totalViews != null) {
+                    // This is from Redis batch sync - set absolute value
+                    metricsUpdate.put("clickCount", totalViews);
+                    log.debug("Setting absolute click count for product {} to {} (from Redis sync)", 
+                        productId, totalViews);
+                } else {
+                    // This is real-time view - increment by specified amount (default 1)
+                    metricsUpdate.put("clickCount", incrementValue);
+                    log.debug("Incrementing click count for product {} by {}", productId, incrementValue);
+                }
+                
+                // Update popularity score if provided
+                Double popularityScore = extractPopularityScore(message);
+                if (popularityScore != null) {
+                    metricsUpdate.put("popularityScore", popularityScore);
+                }
                 
             } else if ("ProductPurchased".equals(eventType)) {
-                // Increment purchase count and recalculate popularity  
-                metricsUpdate.put("purchaseCount", 1); // Will be added to existing value
-                log.debug("Incrementing purchase count for product {}", productId);
+                // Handle purchase events - increment purchase count
+                Long incrementValue = extractPurchaseIncrement(message);
+                metricsUpdate.put("purchaseCount", incrementValue);
+                log.debug("Incrementing purchase count for product {} by {}", productId, incrementValue);
                 
             } else {
                 log.debug("Unknown analytics event type: {}", eventType);
@@ -220,28 +238,48 @@ public class ProductElasticsearchSyncService {
     
     /**
      * Update product metrics using TRUE server-side atomic increments
-     * Single call - no fetch required! 🚀
      */
     private void updateProductMetrics(String productId, Map<String, Object> updates) {
         try {
             // Build Elasticsearch script for server-side atomic updates
             StringBuilder script = new StringBuilder();
+            Map<String, Object> scriptParams = new HashMap<>();
             
             if (updates.containsKey("clickCount")) {
-                script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + 1; ");
+                Long clickCountValue = ((Number) updates.get("clickCount")).longValue();
+                scriptParams.put("clickCount", clickCountValue);
+                
+                // Check if this is an absolute value (from Redis batch sync) or increment
+                if (updates.containsKey("total_views")) {
+                    // This is from Redis batch sync - set absolute value
+                    script.append("ctx._source.clickCount = params.clickCount; ");
+                } else {
+                    // This is a real-time increment
+                    script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + params.clickCount; ");
+                }
             }
             
             if (updates.containsKey("purchaseCount")) {
-                script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + 1; ");
+                Long purchaseCountValue = ((Number) updates.get("purchaseCount")).longValue();
+                scriptParams.put("purchaseCount", purchaseCountValue);
+                script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + params.purchaseCount; ");
             }
             
-            // Recalculate popularity score server-side
-            script.append("long clicks = ctx._source.clickCount ?: 0; ");
-            script.append("long purchases = ctx._source.purchaseCount ?: 0; ");
-            script.append("ctx._source.popularityScore = (clicks * 1.0) + (purchases * 10.0);");
+            // Handle absolute popularity score if provided (from Redis batch sync)
+            if (updates.containsKey("popularityScore")) {
+                Double popularityValue = ((Number) updates.get("popularityScore")).doubleValue();
+                scriptParams.put("popularityScore", popularityValue);
+                script.append("ctx._source.popularityScore = params.popularityScore; ");
+            } else {
+                // Recalculate popularity score server-side
+                script.append("long clicks = ctx._source.clickCount ?: 0; ");
+                script.append("long purchases = ctx._source.purchaseCount ?: 0; ");
+                script.append("ctx._source.popularityScore = (clicks * 1.0) + (purchases * 10.0);");
+            }
 
             UpdateQuery updateQuery = UpdateQuery.builder(productId)
                 .withScript(script.toString())
+                .withParams(scriptParams)
                 .withRetryOnConflict(3)
                 .build();
             
@@ -351,9 +389,8 @@ public class ProductElasticsearchSyncService {
      * This runs periodically to catch any missed events
      */
     @Scheduled(fixedDelayString = "${elasticsearch.sync.incremental-interval-ms:300000}") // 5 minutes
-    @Async
     @Transactional(readOnly = true)
-    public CompletableFuture<Void> performIncrementalSync() {
+    public void performIncrementalSync() {
         log.debug("Starting incremental synchronization");
         
         try {
@@ -363,11 +400,9 @@ public class ProductElasticsearchSyncService {
                 log.info("Incremental synchronization completed. Synced {} products", totalSynced);
             }
             
-            return CompletableFuture.completedFuture(null);
-            
         } catch (Exception e) {
             log.error("Incremental synchronization failed", e);
-            return CompletableFuture.failedFuture(e);
+            // Don't rethrow - scheduled tasks should handle exceptions gracefully
         }
     }
     
@@ -620,6 +655,89 @@ public class ProductElasticsearchSyncService {
         // For demo purposes, assume not processed
         // In production, check cache or database
         return false;
+    }
+    
+    /**
+     * Extract view increment from ProductViewed event message
+     */
+    private Long extractViewIncrement(Message message) {
+        try {
+            ProductEvent.ProductViewed event = objectMapper.readValue(
+                message.getPayload(), ProductEvent.ProductViewed.class);
+            
+            if (event.getMetadata() != null && event.getMetadata().containsKey("view_increment")) {
+                return Long.parseLong(event.getMetadata().get("view_increment"));
+            }
+            
+            // Default to 1 for real-time view events
+            return 1L;
+            
+        } catch (Exception e) {
+            log.warn("Failed to extract view increment from message, defaulting to 1: {}", e.getMessage());
+            return 1L;
+        }
+    }
+    
+    /**
+     * Extract total views from ProductViewed event message (for Redis batch sync)
+     */
+    private Long extractTotalViews(Message message) {
+        try {
+            ProductEvent.ProductViewed event = objectMapper.readValue(
+                message.getPayload(), ProductEvent.ProductViewed.class);
+            
+            if (event.getMetadata() != null && event.getMetadata().containsKey("total_views")) {
+                return Long.parseLong(event.getMetadata().get("total_views"));
+            }
+            
+            // Return null for real-time events (not batch sync)
+            return null;
+            
+        } catch (Exception e) {
+            log.debug("No total views in message (normal for real-time events): {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Extract popularity score from ProductViewed event message
+     */
+    private Double extractPopularityScore(Message message) {
+        try {
+            ProductEvent.ProductViewed event = objectMapper.readValue(
+                message.getPayload(), ProductEvent.ProductViewed.class);
+            
+            if (event.getMetadata() != null && event.getMetadata().containsKey("popularity_score")) {
+                return Double.parseDouble(event.getMetadata().get("popularity_score"));
+            }
+            
+            return null;
+            
+        } catch (Exception e) {
+            log.debug("No popularity score in message: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Extract purchase increment from ProductPurchased event message
+     */
+    private Long extractPurchaseIncrement(Message message) {
+        try {
+            ProductEvent.ProductPurchased event = objectMapper.readValue(
+                message.getPayload(), ProductEvent.ProductPurchased.class);
+            
+            if (event.getMetadata() != null && event.getMetadata().containsKey("purchase_increment")) {
+                return Long.parseLong(event.getMetadata().get("purchase_increment"));
+            }
+            
+            // Default to quantity or 1
+            return event.getQuantity() != null ? event.getQuantity().longValue() : 1L;
+            
+        } catch (Exception e) {
+            log.warn("Failed to extract purchase increment from message, defaulting to 1: {}", e.getMessage());
+            return 1L;
+        }
     }
     
     /**

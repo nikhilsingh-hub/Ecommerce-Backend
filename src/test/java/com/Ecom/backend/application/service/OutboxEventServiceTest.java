@@ -1,5 +1,6 @@
 package com.Ecom.backend.application.service;
 
+import com.Ecom.backend.application.service.OutboxService.OutboxEventService;
 import com.Ecom.backend.domain.entity.OutboxEvent;
 import com.Ecom.backend.infrastructure.pubsub.DTO.Message;
 import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;

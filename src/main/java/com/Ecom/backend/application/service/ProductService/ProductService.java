@@ -1,10 +1,12 @@
-package com.Ecom.backend.application.service;
+package com.Ecom.backend.application.service.ProductService;
 
 import com.Ecom.backend.application.dto.CreateProductRequest;
 import com.Ecom.backend.application.dto.ProductDto;
 import com.Ecom.backend.application.dto.UpdateProductRequest;
 import com.Ecom.backend.application.dto.event.ProductEvent;
 import com.Ecom.backend.application.mapper.ProductMapper;
+import com.Ecom.backend.application.service.OutboxService.OutboxEventService;
+import com.Ecom.backend.application.service.ViewService.ViewCounterService;
 import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
     private final OutboxEventService outboxEventService;
+    private final ViewCounterService viewCounterService;
     
     /**
      * Create a new product
@@ -255,38 +258,74 @@ public class ProductService {
     }
     
     /**
-     * Record a product view for analytics
+     * Record a product view for analytics using Redis for high performance
      * 
      * @param productId Product ID that was viewed
      * @param userId User ID (optional)
      * @param sessionId Session ID
      */
-    @Transactional
     public void recordProductView(Long productId, String userId, String sessionId) {
         log.debug("Recording view for product ID: {} by user: {}", productId, userId);
         
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new IllegalArgumentException("Product not found with ID: " + productId));
-        
-        // Update click count in domain entity
-        product.incrementClickCount();
-        productRepository.save(product);
-        
-        // Publish analytics event
-        ProductEvent.ProductViewed event = ProductEvent.ProductViewed.builder()
-            .productId(productId)
-            .sku(product.getSku())
-            .userId(userId)
-            .sessionId(sessionId)
-            .viewedAt(java.time.LocalDateTime.now())
-            .build();
-        
-        outboxEventService.storeEvent(
-            productId.toString(),
-            "Product",
-            "ProductViewed",
-            event
-        );
+        try {
+            // Increment view count in Redis for real-time performance
+            Long newViewCount = viewCounterService.incrementProductViews(productId);
+            
+            log.debug("Incremented views for product {} to {} (stored in Redis)", productId, newViewCount);
+            
+            // Optional: Publish real-time analytics event for immediate processing
+            // Note: The batch sync will also generate events, so this is for real-time analytics only
+            if (shouldPublishRealTimeEvent(userId, sessionId)) {
+                publishRealTimeViewEvent(productId, userId, sessionId);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to record view for product {}: {}", productId, e.getMessage());
+            // Don't throw exception - view tracking shouldn't break the user experience
+        }
+    }
+    
+    /**
+     * Determine if we should publish a real-time view event
+     * This is optional and can be used for immediate analytics processing
+     */
+    private boolean shouldPublishRealTimeEvent(String userId, String sessionId) {
+        // Only publish real-time events for authenticated users or important sessions
+        // This reduces event volume while keeping the most valuable analytics
+        return userId != null && !userId.equals("anonymous");
+    }
+    
+    /**
+     * Publish real-time view event for immediate analytics processing
+     */
+    private void publishRealTimeViewEvent(Long productId, String userId, String sessionId) {
+        try {
+            ProductEvent.ProductViewed event = ProductEvent.ProductViewed.builder()
+                .productId(productId)
+                .sku("") // SKU will be populated by event processor if needed
+                .userId(userId)
+                .sessionId(sessionId)
+                .viewedAt(java.time.LocalDateTime.now())
+                .referrer("real-time")
+                .metadata(java.util.Map.of(
+                    "event_source", "real-time",
+                    "view_increment", "1"
+                ))
+                .build();
+            
+            outboxEventService.storeEvent(
+                productId.toString(),
+                "Product",
+                "ProductViewed",
+                event
+            );
+            
+            log.debug("Published real-time view event for product {}", productId);
+            
+        } catch (Exception e) {
+            log.warn("Failed to publish real-time view event for product {}: {}", productId, e.getMessage());
+            // Don't throw - this is optional analytics
+        }
     }
     
     /**

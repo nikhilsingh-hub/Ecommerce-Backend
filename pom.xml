@@ -68,6 +68,12 @@
 			<artifactId>spring-boot-starter-data-elasticsearch</artifactId>
 		</dependency>
 		
+		<!-- Redis for caching and real-time counters -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		
 		<!-- Validation -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

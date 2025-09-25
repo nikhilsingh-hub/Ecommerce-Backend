@@ -1,8 +1,8 @@
 package com.Ecom.backend.presentation.controller;
 
 import com.Ecom.backend.application.dto.*;
-import com.Ecom.backend.application.service.ProductSearchService;
-import com.Ecom.backend.application.service.ProductService;
+import com.Ecom.backend.application.service.ProductService.* ;
+import com.Ecom.backend.application.service.ProductService.ProductService;
 import com.Ecom.backend.presentation.dto.ApiResponse;
 import com.Ecom.backend.presentation.dto.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;

@@ -1,7 +1,7 @@
 package com.Ecom.backend.presentation.controller;
 
-import com.Ecom.backend.application.service.OutboxEventService;
-import com.Ecom.backend.application.service.ProductElasticsearchSyncService;
+import com.Ecom.backend.application.service.OutboxService.OutboxEventService;
+import com.Ecom.backend.application.service.ProductService.ProductElasticsearchSyncService ;
 import com.Ecom.backend.infrastructure.pubsub.Broker.InMemoryMessageBroker;
 import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;
 import com.Ecom.backend.infrastructure.repository.ProductRepository;

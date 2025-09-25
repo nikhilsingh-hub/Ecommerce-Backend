@@ -1,4 +1,4 @@
-package com.Ecom.backend.application.service;
+package com.Ecom.backend.application.service.ProductService;
 
 import com.Ecom.backend.application.dto.ProductDto;
 import com.Ecom.backend.application.dto.ProductSearchRequest;

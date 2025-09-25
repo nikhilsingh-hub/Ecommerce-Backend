@@ -1,4 +1,4 @@
-package com.Ecom.backend.application.service;
+package com.Ecom.backend.application.service.OutboxService;
 
 import com.Ecom.backend.domain.entity.OutboxEvent;
 import com.Ecom.backend.infrastructure.repository.OutboxEventRepository;

@@ -1,8 +1,10 @@
 package com.Ecom.backend.presentation.controller;
 
 import com.Ecom.backend.application.dto.event.ProductEvent;
-import com.Ecom.backend.application.service.ProductElasticsearchSyncService;
-import com.Ecom.backend.application.service.OutboxEventService;
+import com.Ecom.backend.application.service.ProductService.ProductElasticsearchSyncService;
+import com.Ecom.backend.application.service.OutboxService.OutboxEventService;
+import com.Ecom.backend.application.service.ViewService.ViewCounterService;
+import com.Ecom.backend.application.service.ViewService.ViewSyncService;
 import com.Ecom.backend.domain.entity.OutboxEvent;
 import com.Ecom.backend.infrastructure.pubsub.Interface.MessagePublisher;
 import com.Ecom.backend.presentation.dto.ApiResponse;
@@ -35,6 +37,8 @@ public class AdminController {
     private final MessagePublisher messagePublisher;
     private final ProductElasticsearchSyncService syncService;
     private final OutboxEventService outboxEventService;
+    private final ViewCounterService viewCounterService;
+    private final ViewSyncService viewSyncService;
     
     @Operation(
         summary = "Store batch product events in outbox",
@@ -297,5 +301,157 @@ public class AdminController {
         private String status;
         private String message;
         private Long productId;
+    }
+    
+    // ==================== VIEW COUNTER ADMIN ENDPOINTS ====================
+    
+    @Operation(
+        summary = "Get view counter statistics",
+        description = "Get current statistics for the Redis-based view counter system"
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "View counter stats retrieved successfully"
+        )
+    })
+    @GetMapping("/views/stats")
+    public ResponseEntity<ApiResponse<ViewCounterService.ViewStats>> getViewStats(
+            HttpServletRequest httpRequest) {
+        
+        log.debug("Getting view counter statistics");
+        
+        ViewCounterService.ViewStats stats = viewCounterService.getViewStats();
+        
+        ApiResponse<ViewCounterService.ViewStats> response = 
+            ApiResponse.<ViewCounterService.ViewStats>builder()
+                .success(true)
+                .message("View counter stats retrieved")
+                .data(stats)
+                .path(httpRequest.getRequestURI())
+                .build();
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @Operation(
+        summary = "Get view synchronization statistics",
+        description = "Get current synchronization status for Redis to database sync"
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Sync stats retrieved successfully"
+        )
+    })
+    @GetMapping("/views/sync-stats")
+    public ResponseEntity<ApiResponse<ViewSyncService.SyncStats>> getSyncStats(
+            HttpServletRequest httpRequest) {
+        
+        log.debug("Getting view sync statistics");
+        
+        ViewSyncService.SyncStats stats = viewSyncService.getSyncStats();
+        
+        ApiResponse<ViewSyncService.SyncStats> response = 
+            ApiResponse.<ViewSyncService.SyncStats>builder()
+                .success(true)
+                .message("View sync stats retrieved")
+                .data(stats)
+                .path(httpRequest.getRequestURI())
+                .build();
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @Operation(
+        summary = "Trigger manual view sync",
+        description = "Manually trigger synchronization of Redis view counts to database"
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Manual sync completed successfully"
+        )
+    })
+    @PostMapping("/views/sync")
+    public ResponseEntity<ApiResponse<ViewSyncService.SyncResult>> triggerViewSync(
+            HttpServletRequest httpRequest) {
+        
+        log.info("Manual view sync triggered from admin endpoint");
+        
+        try {
+            ViewSyncService.SyncResult result = viewSyncService.triggerManualSync();
+            
+            ApiResponse<ViewSyncService.SyncResult> response = 
+                ApiResponse.<ViewSyncService.SyncResult>builder()
+                    .success(true)
+                    .message("Manual view sync completed successfully")
+                    .data(result)
+                    .path(httpRequest.getRequestURI())
+                    .build();
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Failed to trigger manual view sync", e);
+            throw new RuntimeException("Failed to trigger manual view sync: " + e.getMessage());
+        }
+    }
+    
+    @Operation(
+        summary = "Get product view count",
+        description = "Get current view count for a specific product from Redis"
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Product view count retrieved successfully"
+        )
+    })
+    @GetMapping("/views/product/{productId}")
+    public ResponseEntity<ApiResponse<ProductViewInfo>> getProductViewCount(
+            @Parameter(description = "Product ID")
+            @PathVariable Long productId,
+            HttpServletRequest httpRequest) {
+        
+        log.debug("Getting view count for product {}", productId);
+        
+        try {
+            Long totalViews = viewCounterService.getProductViews(productId);
+            Long dailyViews = viewCounterService.getDailyProductViews(productId);
+            
+            ProductViewInfo viewInfo = ProductViewInfo.builder()
+                .productId(productId)
+                .totalViews(totalViews)
+                .dailyViews(dailyViews)
+                .retrievedAt(java.time.LocalDateTime.now())
+                .build();
+            
+            ApiResponse<ProductViewInfo> response = 
+                ApiResponse.<ProductViewInfo>builder()
+                    .success(true)
+                    .message("Product view count retrieved successfully")
+                    .data(viewInfo)
+                    .path(httpRequest.getRequestURI())
+                    .build();
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Failed to get view count for product {}", productId, e);
+            throw new RuntimeException("Failed to get product view count: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Response DTO for product view information
+     */
+    @Data
+    @Builder
+    public static class ProductViewInfo {
+        private Long productId;
+        private Long totalViews;
+        private Long dailyViews;
+        private java.time.LocalDateTime retrievedAt;
     }
 }
