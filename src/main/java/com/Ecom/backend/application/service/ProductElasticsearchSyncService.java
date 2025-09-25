@@ -12,6 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.UpdateQuery;
+import org.springframework.data.elasticsearch.core.script.Script;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -43,6 +47,7 @@ public class ProductElasticsearchSyncService {
     private final ProductRepository productRepository;
     private final ProductSearchRepository searchRepository;
     private final ObjectMapper objectMapper;
+    private final ElasticsearchOperations elasticsearchOperations;
     
     @Value("${elasticsearch.sync.batch-size:100}")
     private int syncBatchSize;
@@ -215,40 +220,84 @@ public class ProductElasticsearchSyncService {
     }
     
     /**
-     * Update product metrics directly from message data - minimal approach for POC
-     * Only fetches the specific fields we need to update
+     * Update product metrics using TRUE server-side atomic increments
+     * Single call - no fetch required! 🚀
      */
     private void updateProductMetrics(String productId, Map<String, Object> updates) {
         try {
-            // Minimal fetch - only get the fields we need to increment
-            Optional<ProductDocument> docOpt = searchRepository.findById(productId);
-            if (docOpt.isPresent()) {
-                ProductDocument doc = docOpt.get();
-                
-                // Increment counters directly from message
-                if (updates.containsKey("clickCount")) {
-                    doc.setClickCount((doc.getClickCount() == null ? 0 : doc.getClickCount()) + 1);
-                }
-                
-                if (updates.containsKey("purchaseCount")) {
-                    doc.setPurchaseCount((doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount()) + 1);
-                }
-                
-                // Recalculate popularity score
-                long clicks = doc.getClickCount() == null ? 0 : doc.getClickCount();
-                long purchases = doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount();
-                doc.setPopularityScore(calculatePopularityScore(clicks, purchases));
-                
-                searchRepository.save(doc);
-                log.debug("Updated metrics for product {} - clicks: {}, purchases: {}", 
-                    productId, doc.getClickCount(), doc.getPurchaseCount());
-            } else {
-                log.warn("Product {} not found in Elasticsearch for metrics update", productId);
+            // Build Elasticsearch script for server-side atomic updates
+            StringBuilder script = new StringBuilder();
+            Map<String, Object> params = new HashMap<>();
+            
+            if (updates.containsKey("clickCount")) {
+                script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + params.clickIncrement; ");
+                params.put("clickIncrement", 1);
             }
             
+            if (updates.containsKey("purchaseCount")) {
+                script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + params.purchaseIncrement; ");
+                params.put("purchaseIncrement", 1);
+            }
+            
+            // Recalculate popularity score server-side
+            script.append("long clicks = ctx._source.clickCount ?: 0; ");
+            script.append("long purchases = ctx._source.purchaseCount ?: 0; ");
+            script.append("ctx._source.popularityScore = (clicks * 1.0) + (purchases * 10.0);");
+            
+            // TRUE atomic update - single call to Elasticsearch
+            Script updateScript = Script.builder()
+                .withSource(script.toString())
+                .withParams(params)
+                .build();
+                
+            UpdateQuery updateQuery = UpdateQuery.builder(productId)
+                .withScript(updateScript)
+                .withRetryOnConflict(3)  // Handle concurrent updates
+                .build();
+            
+            IndexCoordinates index = IndexCoordinates.of("products");
+            elasticsearchOperations.update(updateQuery, index);
+            log.debug("Server-side atomic update completed for product {} - updates: {}", productId, updates.keySet());
+            
         } catch (Exception e) {
-            log.error("Failed to update metrics for product {}", productId, e);
-            throw e;
+            log.error("Failed to atomically update metrics for product {}", productId, e);
+            
+            // Fallback to fetch+save for POC reliability
+            try {
+                log.debug("Falling back to fetch+save approach for product {}", productId);
+                updateProductMetricsFallback(productId, updates);
+            } catch (Exception fallbackError) {
+                log.error("Fallback update also failed for product {}", productId, fallbackError);
+                throw fallbackError;
+            }
+        }
+    }
+    
+    /**
+     * Fallback method using fetch+save approach
+     */
+    private void updateProductMetricsFallback(String productId, Map<String, Object> updates) {
+        Optional<ProductDocument> docOpt = searchRepository.findById(productId);
+        if (docOpt.isPresent()) {
+            ProductDocument doc = docOpt.get();
+            
+            if (updates.containsKey("clickCount")) {
+                doc.setClickCount((doc.getClickCount() == null ? 0 : doc.getClickCount()) + 1);
+            }
+            
+            if (updates.containsKey("purchaseCount")) {
+                doc.setPurchaseCount((doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount()) + 1);
+            }
+            
+            // Recalculate popularity
+            long clicks = doc.getClickCount() == null ? 0 : doc.getClickCount();
+            long purchases = doc.getPurchaseCount() == null ? 0 : doc.getPurchaseCount();
+            doc.setPopularityScore(calculatePopularityScore(clicks, purchases));
+            
+            searchRepository.save(doc);
+            log.debug("Fallback update completed for product {}", productId);
+        } else {
+            log.warn("Product {} not found for fallback update", productId);
         }
     }
     
