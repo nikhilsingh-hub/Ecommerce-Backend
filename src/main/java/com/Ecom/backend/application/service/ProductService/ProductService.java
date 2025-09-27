@@ -48,6 +48,7 @@ public class ProductService {
      * @return Created product DTO
      * @throws IllegalArgumentException if SKU already exists
      */
+    @Transactional
     public ProductDto createProduct(CreateProductRequest request) {
         log.debug("Creating product with SKU: {}", request.getSku());
         
@@ -92,6 +93,7 @@ public class ProductService {
      * @param sku Product SKU
      * @return Product DTO if found
      */
+    @Transactional(readOnly = true)
     public Optional<ProductDto> getProductBySku(String sku) {
         log.debug("Fetching product with SKU: {}", sku);
         return productRepository.findBySku(sku)

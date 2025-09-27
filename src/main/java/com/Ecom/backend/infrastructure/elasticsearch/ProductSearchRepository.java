@@ -114,20 +114,15 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
      */
     @Query("""
     {
-      "size": 10,
-      "_source": ["id", "name"],
-      "query": {
-        "match_phrase_prefix": {
-          "name": {
-            "query": "?0",
-            "max_expansions": 50,
-            "fuzziness": "AUTO"
-          }
+      "match_phrase_prefix": {
+        "name": {
+          "query": "?0",
+          "max_expansions": 50
         }
       }
     }
     """)
-    List<ProductDocument> autocompleteProductNames(String query);
+    List<ProductDocument> autocompleteProductNames(String query, Pageable pageable);
     
     /**
      * Find similar products using More Like This query

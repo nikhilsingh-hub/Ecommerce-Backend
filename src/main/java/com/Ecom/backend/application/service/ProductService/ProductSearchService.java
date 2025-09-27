@@ -233,21 +233,21 @@ public class ProductSearchService {
      */
     public List<String> getAutocompleteSuggestions(String query, int limit) {
         log.debug("Getting autocomplete suggestions for query: {}", query);
-        
+
         try {
-            List<ProductDocument> suggestions = searchRepository.autocompleteProductNames(query);
+            List<ProductDocument> suggestions = searchRepository.autocompleteProductNames(query, PageRequest.of(0, limit));
             return suggestions.stream()
                 .limit(limit)
                 .map(ProductDocument::getName)
                 .distinct()
                 .collect(Collectors.toList());
-                
+
         } catch (Exception e) {
             log.warn("Elasticsearch autocomplete failed: {}", e.getMessage());
             return new ArrayList<>();
         }
     }
-    
+
     /**
      * Get popular products
      * 
