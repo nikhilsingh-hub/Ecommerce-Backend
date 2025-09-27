@@ -32,9 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 
-# Custom files
-Prompt.txt
-
 # Environment and Configuration Files
 .env
 .env.local
