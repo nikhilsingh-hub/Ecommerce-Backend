@@ -1,6 +1,7 @@
 package com.Ecom.backend.application.service.ProductService;
 
 import com.Ecom.backend.application.dto.event.ProductEvent;
+import com.Ecom.backend.application.dto.event.ProductEventType;
 import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductDocument;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductSearchRepository;
@@ -58,7 +59,7 @@ public class ProductElasticsearchSyncService {
         log.debug("Processing product event: {}", message.getEventType());
 
         try {
-            // Check idempotency
+
             String idempotencyKey = message.getHeaders().get("idempotency-key");
             if (isAlreadyProcessed(idempotencyKey)) {
                 log.debug("Event {} already processed, skipping", idempotencyKey);
@@ -66,11 +67,11 @@ public class ProductElasticsearchSyncService {
             }
 
             // Process based on event type
-            switch (message.getEventType()) {
-                case "ProductCreated" -> handleProductCreated(message);
-                case "ProductUpdated" -> handleProductUpdated(message);
-                case "ProductDeleted" -> handleProductDeleted(message);
-                case "ProductViewed", "ProductPurchased" -> handleProductAnalyticsEvent(message);
+            switch (ProductEventType.fromString(message.getEventType())) {
+                case PRODUCT_CREATED -> handleProductCreated(message);
+                case PRODUCT_UPDATED -> handleProductUpdated(message);
+                case PRODUCT_DELETED -> handleProductDeleted(message);
+                case PRODUCT_VIEWED, PRODUCT_PURCHASED -> handleProductAnalyticsEvent(message);
                 default -> log.warn("Unknown event type: {}", message.getEventType());
             }
 
@@ -88,10 +89,8 @@ public class ProductElasticsearchSyncService {
      */
     public void handleProductCreated(Message message) {
         try {
-            ProductEvent.ProductCreated event = objectMapper.readValue(
-                message.getPayload(), ProductEvent.ProductCreated.class);
+            ProductEvent.ProductCreated event = objectMapper.readValue(message.getPayload(), ProductEvent.ProductCreated.class);
 
-            // Create ProductDocument directly from event data - no database fetch needed!
             ProductDocument document = ProductDocument.builder()
                 .id(event.getProductId().toString())
                 .productId(event.getProductId())
@@ -103,15 +102,15 @@ public class ProductElasticsearchSyncService {
                 .attributes(event.getAttributes())
                 .images(event.getImages())
                 .createdAt(event.getCreatedAt())
-                .updatedAt(event.getCreatedAt()) // Same as created for new products
-                .clickCount(0L) // New product starts with 0
-                .purchaseCount(0L) // New product starts with 0
-                .popularityScore(0.0) // New product starts with 0
+                .updatedAt(event.getCreatedAt())
+                .clickCount(0L)
+                .purchaseCount(0L)
+                .popularityScore(0.0)
                 .allText(buildAllTextFromEvent(event))
                 .tags(generateTagsFromEvent(event))
-                .inStock(true) // Assume new products are in stock
+                .inStock(true)
                 .priceRange(calculatePriceRange(event.getPrice()))
-                .scoreBoost(1.0) // Default boost for new products
+                .scoreBoost(1.0)
                 .build();
 
             searchRepository.save(document);
@@ -131,7 +130,6 @@ public class ProductElasticsearchSyncService {
             ProductEvent.ProductUpdated event = objectMapper.readValue(
                 message.getPayload(), ProductEvent.ProductUpdated.class);
 
-            // Create ProductDocument directly from event data - no database fetch needed!
             ProductDocument document = ProductDocument.builder()
                 .id(event.getProductId().toString())
                 .productId(event.getProductId())
@@ -142,16 +140,16 @@ public class ProductElasticsearchSyncService {
                 .sku(event.getSku())
                 .attributes(event.getAttributes())
                 .images(event.getImages())
-                .createdAt(null) // We don't have createdAt in update events, ES will preserve existing value
+                .createdAt(null)
                 .updatedAt(event.getUpdatedAt())
-                .clickCount(null) // Preserve existing analytics data in Elasticsearch
-                .purchaseCount(null) // Preserve existing analytics data in Elasticsearch
-                .popularityScore(null) // Preserve existing analytics data in Elasticsearch
+                .clickCount(null)
+                .purchaseCount(null)
+                .popularityScore(null)
                 .allText(buildAllTextFromEvent(event))
                 .tags(generateTagsFromEvent(event))
-                .inStock(true) // Assume updated products are in stock
+                .inStock(true)
                 .priceRange(calculatePriceRange(event.getPrice()))
-                .scoreBoost(1.0) // Default boost
+                .scoreBoost(1.0)
                 .build();
 
             searchRepository.save(document);
@@ -168,8 +166,7 @@ public class ProductElasticsearchSyncService {
      */
     public void handleProductDeleted(Message message) {
         try {
-            ProductEvent.ProductDeleted event = objectMapper.readValue(
-                message.getPayload(), ProductEvent.ProductDeleted.class);
+            ProductEvent.ProductDeleted event = objectMapper.readValue(message.getPayload(), ProductEvent.ProductDeleted.class);
 
             searchRepository.deleteById(event.getProductId().toString());
             log.debug("Deleted product {} from Elasticsearch", event.getProductId());
@@ -182,34 +179,26 @@ public class ProductElasticsearchSyncService {
 
     /**
      * Handle analytics events (view, purchase) to update metrics
-     * Uses direct script-based updates for maximum efficiency
      */
     public void handleProductAnalyticsEvent(Message message) {
         try {
             String aggregateId = message.getHeaders().get("aggregate-id");
             String eventType = message.getEventType();
             Long productId = Long.parseLong(aggregateId);
-            
-            // Create metrics update directly from message - no fetch needed!
+
             Map<String, Object> metricsUpdate = new HashMap<>();
             
             if ("ProductViewed".equals(eventType)) {
-                // Handle ProductViewed events - check if it's from Redis sync or real-time
                 Long incrementValue = extractViewIncrement(message);
                 Long totalViews = extractTotalViews(message);
                 
                 if (totalViews != null) {
-                    // This is from Redis batch sync - set absolute value
                     metricsUpdate.put("clickCount", totalViews);
-                    log.debug("Setting absolute click count for product {} to {} (from Redis sync)", 
-                        productId, totalViews);
                 } else {
-                    // This is real-time view - increment by specified amount (default 1)
                     metricsUpdate.put("clickCount", incrementValue);
                     log.debug("Incrementing click count for product {} by {}", productId, incrementValue);
                 }
-                
-                // Update popularity score if provided
+
                 Double popularityScore = extractPopularityScore(message);
                 if (popularityScore != null) {
                     metricsUpdate.put("popularityScore", popularityScore);
@@ -241,7 +230,6 @@ public class ProductElasticsearchSyncService {
      */
     private void updateProductMetrics(String productId, Map<String, Object> updates) {
         try {
-            // Build Elasticsearch script for server-side atomic updates
             StringBuilder script = new StringBuilder();
             Map<String, Object> scriptParams = new HashMap<>();
             
@@ -249,12 +237,9 @@ public class ProductElasticsearchSyncService {
                 Long clickCountValue = ((Number) updates.get("clickCount")).longValue();
                 scriptParams.put("clickCount", clickCountValue);
                 
-                // Check if this is an absolute value (from Redis batch sync) or increment
                 if (updates.containsKey("total_views")) {
-                    // This is from Redis batch sync - set absolute value
                     script.append("ctx._source.clickCount = params.clickCount; ");
                 } else {
-                    // This is a real-time increment
                     script.append("ctx._source.clickCount = (ctx._source.clickCount ?: 0) + params.clickCount; ");
                 }
             }
@@ -265,13 +250,11 @@ public class ProductElasticsearchSyncService {
                 script.append("ctx._source.purchaseCount = (ctx._source.purchaseCount ?: 0) + params.purchaseCount; ");
             }
             
-            // Handle absolute popularity score if provided (from Redis batch sync)
             if (updates.containsKey("popularityScore")) {
                 Double popularityValue = ((Number) updates.get("popularityScore")).doubleValue();
                 scriptParams.put("popularityScore", popularityValue);
                 script.append("ctx._source.popularityScore = params.popularityScore; ");
             } else {
-                // Recalculate popularity score server-side
                 script.append("long clicks = ctx._source.clickCount ?: 0; ");
                 script.append("long purchases = ctx._source.purchaseCount ?: 0; ");
                 script.append("ctx._source.popularityScore = (clicks * 1.0) + (purchases * 10.0);");
@@ -290,7 +273,6 @@ public class ProductElasticsearchSyncService {
         } catch (Exception e) {
             log.error("Failed to atomically update metrics for product {}", productId, e);
             
-            // Fallback to fetch+save for POC reliability
             try {
                 log.debug("Falling back to fetch+save approach for product {}", productId);
                 updateProductMetricsFallback(productId, updates);
@@ -373,73 +355,6 @@ public class ProductElasticsearchSyncService {
             
             log.debug("Synced batch {} with {} products (total: {})", 
                 page + 1, documents.size(), totalSynced);
-            
-            if (products.isLast()) {
-                break;
-            }
-            
-            page++;
-        }
-        
-        return totalSynced;
-    }
-    
-    /**
-     * Perform incremental sync for products updated since last sync
-     * This runs periodically to catch any missed events
-     */
-    @Scheduled(fixedDelayString = "${elasticsearch.sync.incremental-interval-ms:300000}") // 5 minutes
-    @Transactional(readOnly = true)
-    public void performIncrementalSync() {
-        log.debug("Starting incremental synchronization");
-        
-        try {
-            long totalSynced = performIncrementalSyncInternal();
-            
-            if (totalSynced > 0) {
-                log.info("Incremental synchronization completed. Synced {} products", totalSynced);
-            }
-            
-        } catch (Exception e) {
-            log.error("Incremental synchronization failed", e);
-            // Don't rethrow - scheduled tasks should handle exceptions gracefully
-        }
-    }
-    
-    private long performIncrementalSyncInternal() {
-        // Find products updated in the last hour (to be safe)
-        java.time.LocalDateTime since = java.time.LocalDateTime.now().minusHours(1);
-        
-        int page = 0;
-        long totalSynced = 0;
-        
-        while (true) {
-            PageRequest pageRequest = PageRequest.of(page, syncBatchSize);
-            
-            // Use JOIN FETCH to eagerly load categories
-            Page<Product> products = productRepository.findAllWithCategories(pageRequest);
-            
-            if (products.isEmpty()) {
-                break;
-            }
-            
-            // Filter products updated since the last sync
-            List<Product> recentlyUpdated = products.getContent().stream()
-                .filter(product -> product.getUpdatedAt().isAfter(since))
-                .toList();
-            
-            if (!recentlyUpdated.isEmpty()) {
-                List<ProductDocument> documents = recentlyUpdated.stream()
-                    .map(product -> {
-                        // Force initialization of lazy collections within transaction
-                        initializeProductCollections(product);
-                        return ProductDocument.fromProduct(product);
-                    })
-                    .toList();
-                
-                searchRepository.saveAll(documents);
-                totalSynced += documents.size();
-            }
             
             if (products.isLast()) {
                 break;
@@ -662,14 +577,12 @@ public class ProductElasticsearchSyncService {
      */
     private Long extractViewIncrement(Message message) {
         try {
-            ProductEvent.ProductViewed event = objectMapper.readValue(
-                message.getPayload(), ProductEvent.ProductViewed.class);
+            ProductEvent.ProductViewed event = objectMapper.readValue(message.getPayload(), ProductEvent.ProductViewed.class);
             
             if (event.getMetadata() != null && event.getMetadata().containsKey("view_increment")) {
                 return Long.parseLong(event.getMetadata().get("view_increment"));
             }
-            
-            // Default to 1 for real-time view events
+
             return 1L;
             
         } catch (Exception e) {
@@ -689,10 +602,8 @@ public class ProductElasticsearchSyncService {
             if (event.getMetadata() != null && event.getMetadata().containsKey("total_views")) {
                 return Long.parseLong(event.getMetadata().get("total_views"));
             }
-            
-            // Return null for real-time events (not batch sync)
+
             return null;
-            
         } catch (Exception e) {
             log.debug("No total views in message (normal for real-time events): {}", e.getMessage());
             return null;
@@ -710,9 +621,9 @@ public class ProductElasticsearchSyncService {
             if (event.getMetadata() != null && event.getMetadata().containsKey("popularity_score")) {
                 return Double.parseDouble(event.getMetadata().get("popularity_score"));
             }
-            
+
             return null;
-            
+
         } catch (Exception e) {
             log.debug("No popularity score in message: {}", e.getMessage());
             return null;
@@ -744,7 +655,6 @@ public class ProductElasticsearchSyncService {
      * Mark event as processed (in production, store in Redis or database)
      */
     private void markAsProcessed(String idempotencyKey) {
-        // For demo purposes, do nothing
         // In production, store in cache or database with TTL
     }
     

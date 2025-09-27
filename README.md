@@ -44,20 +44,7 @@ After running `docker-compose up -d`, access:
 - 📚 **API Documentation**: http://localhost:8080/swagger-ui.html
 - 🔍 **Elasticsearch**: http://localhost:9200
 - 🗄️ **Database Admin**: http://localhost:8081
-- ⚡ **Redis** (CLI): `docker exec -it ecombackend-redis-1 redis-cli -a redis_password_123`
 - 📊 **Grafana**: http://localhost:3000 (admin/admin)
-
-### Quick Redis Testing
-```bash
-# Test view counter functionality
-curl "http://localhost:8080/api/v1/products/1"  # Increments view count
-curl "http://localhost:8080/api/v1/admin/views/product/1"  # Check count
-
-# Monitor Redis directly
-docker exec -it ecombackend-redis-1 redis-cli -a redis_password_123
-redis> GET product:views:1
-redis> SMEMBERS pending_sync_views
-```
 
 ---
 
@@ -96,20 +83,16 @@ This system implements several key architectural patterns working together:
                            │  │   Product   │ │   Search    │ │     Outbox      │    │
                            │  │   Service   │ │   Service   │ │ Event Service   │    │
                            │  └─────────────┘ └─────────────┘ └─────────────────┘    │
-                           │  ┌─────────────┐ ┌─────────────┐                        │
-                           │  │ViewCounter  │ │ ViewSync    │ 🔥 NEW: Redis Layer    │
-                           │  │  Service    │ │  Service    │                        │
-                           │  └─────────────┘ └─────────────┘                        │
                            └─────────────────────┬───────────────────────────────────┘
                                                  │
-┌──────────────────────┬─────────────────────┼─────────────────────┬──────────────────────┬──────────────────────┐
-│                      │                     │                     │                      │                      │
-▼                      ▼                     ▼                     ▼                      ▼                      ▼
-┌─────────┐         ┌─────────────┐       ┌─────────────┐       ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│  MySQL  │         │   Outbox    │       │  PubSub     │       │Elasticsearch│         │    Redis    │         │   Admin     │
-│Database │◄────────┤    Table    ├──────►│  Broker     ├──────►│   Search    │         │   Cache     │         │  Dashboard  │
-│(Write)  │         │(Event Store)│       │(Message Hub)│       │  (Read)     │         │ (Counters)  │         │ (Monitoring)│
-└─────────┘         └─────────────┘       └─────────────┘       └─────────────┘         └─────────────┘         └─────────────┘
+    ┌──────────────────────┬─────────────────────┼─────────────────────┬──────────────────────┐
+    │                      │                     │                     │                      │
+    ▼                      ▼                     ▼                     ▼                      ▼
+┌─────────┐         ┌─────────────┐       ┌─────────────┐       ┌─────────────┐         ┌─────────────┐
+│  MySQL  │         │   Outbox    │       │  PubSub     │       │Elasticsearch│         │   Admin     │
+│Database │◄────────┤    Table    ├──────►│  Broker     ├──────►│   Search    │         │  Dashboard  │
+│(Write)  │         │(Event Store)│       │(Message Hub)│       │  (Read)     │         │ (Monitoring)│
+└─────────┘         └─────────────┘       └─────────────┘       └─────────────┘         └─────────────┘
      │                      │                     │                     │                      │
      │                      │                     ▼                     │                      │
      │                      │              ┌─────────────┐              │                      │
@@ -236,16 +219,8 @@ Domain Events Generated:
 ├── 📝 ProductCreated     → Triggers ES indexing
 ├── 🔄 ProductUpdated     → Triggers ES re-indexing  
 ├── 🗑️ ProductDeleted     → Triggers ES deletion
-├── 👁️ ProductViewed      → Triggers analytics update (Real-time + Redis Batch Sync)
-│   ├── 🚀 Real-time      → Immediate Redis counter increment (<1ms)
-│   └── 🔄 Batch Sync     → Periodic DB sync + ES update (30s intervals)
+├── 👁️ ProductViewed      → Triggers analytics update
 └── 💰 ProductPurchased   → Triggers metrics update
-
-Redis Integration Flow:
-┌─────────────────────────────────────────────────────────────────────┐
-│ User Views → Redis INCR → Background Sync → DB Update → ES Event    │
-│    <1ms        <1ms         30s intervals      ACID       Async     │
-└─────────────────────────────────────────────────────────────────────┘
 
 Event Processing Guarantees:
 ✅ At-least-once delivery
@@ -253,121 +228,6 @@ Event Processing Guarantees:
 ✅ Retry with exponential backoff
 ✅ Dead letter queue for failures
 ✅ Message ordering preservation
-✅ Redis-first performance optimization
-```
-
----
-
-## ⚡ Redis Real-Time View Counter Architecture
-
-### High-Performance View Tracking System
-```
-                            REDIS-BASED VIEW COUNTER FLOW
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                     │
-│  1️⃣ User Views Product         2️⃣ Redis Counter         3️⃣ Background Sync           │
-│  ┌─────────────────────┐       ┌─────────────────┐       ┌─────────────────────┐    │
-│  │   GET /products/1   │───┬─►│    Redis         │       │   ViewSyncService   │    │
-│  │   (Sub-millisecond  │   │  │                  │       │   (Every 30s)       │    │
-│  │    response)        │   │  │ product:views:1  │       │                     │    │
-│  └─────────────────────┘   │  │ ┌─────────────┐  │       │ ┌─────────────────┐ │    │
-│                             │  │ │ INCR → 47   │  │◄─────┤ │ Get pending     │ │    │
-│  ┌─────────────────────┐   │  │ └─────────────┘  │       │ │ sync products   │ │    │
-│  │   ViewCounterService│───┘  │                  │       │ └─────────────────┘ │    │
-│  │   .incrementViews() │      │ pending_sync_    │       └─────────────────────┘    │
-│  └─────────────────────┘      │ views: {1,2,3}   │                │                │
-│                                └─────────────────┘                │                │
-└─────────────────────────────────────────────────────────────────────┼────────────────┘
-                                          │                          │                
-                                          ▼                          ▼                
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           DATABASE & EVENT SYNCHRONIZATION                         │
-│                                                                                     │
-│  4️⃣ Database Update             5️⃣ Event Generation          6️⃣ Elasticsearch Sync   │
-│  ┌─────────────────────┐       ┌─────────────────────┐       ┌─────────────────┐    │
-│  │      MySQL DB       │       │   ProductViewed     │       │  Elasticsearch  │    │
-│  │                     │       │      Event          │       │                 │    │
-│  │ Product Table       │       │                     │       │ Product Index   │    │
-│  │ ┌─────────────────┐ │       │ ┌─────────────────┐ │       │ ┌─────────────┐ │    │
-│  │ │ clickCount: 47  │ │◄──────┤ │ Batch Metadata  │ ├──────►│ │clickCount:47│ │    │
-│  │ │ popularityScore │ │       │ │ view_increment  │ │       │ │popularity:  │ │    │
-│  │ │ updated         │ │       │ │ total_views     │ │       │ │updated      │ │    │
-│  │ └─────────────────┘ │       │ └─────────────────┘ │       │ └─────────────┘ │    │
-│  └─────────────────────┘       └─────────────────────┘       └─────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Redis Data Structure Design
-```
-Redis Key Patterns:
-├── 🔢 product:views:{productId}           → Total view count (persistent)
-├── 📅 product:daily_views:{productId}:{date} → Daily views (7-day TTL)
-├── 🔄 pending_sync_views                  → Set of products needing DB sync
-└── 🗂️ product:metadata:{productId}        → Optional: cached product data
-
-Example Data:
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ Redis Keys:                                                                     │
-│ ┌─────────────────────────────────────────────────────────────────────────────┐ │
-│ │ product:views:1             → "47"                                         │ │
-│ │ product:views:2             → "23"                                         │ │
-│ │ product:daily_views:1:2025-09-25 → "15"  (expires in 7 days)              │ │
-│ │ pending_sync_views          → {1, 2, 5, 8}  (set of product IDs)          │ │
-│ └─────────────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Performance Benefits
-```
-Metric Comparison: Database vs Redis View Tracking
-
-                    Traditional DB          Redis + Background Sync
-                    ┌─────────────┐        ┌─────────────────────┐
-Response Time       │  50-200ms   │   ═══► │    < 1ms           │
-Concurrent Users    │  ~500       │   ═══► │    50,000+         │
-Database Load       │  High       │   ═══► │    Near Zero       │
-Scalability         │  Limited    │   ═══► │    Horizontal      │
-Data Consistency    │  Immediate  │   ═══► │    Eventually      │
-                    └─────────────┘        └─────────────────────┘
-
-🔥 Result: 100x faster response times, 100x more concurrent users!
-```
-
-### Redis Commands for Monitoring
-```bash
-# Connect to Redis
-redis-cli -a redis_password_123
-
-# Check view counts
-GET product:views:1
-GET product:views:2
-
-# Check daily views
-GET product:daily_views:1:2025-09-25
-
-# Check pending sync queue
-SMEMBERS pending_sync_views
-SCARD pending_sync_views
-
-# Monitor real-time changes
-MONITOR
-
-# Redis system info
-INFO memory
-INFO keyspace
-```
-
-### Configuration
-```properties
-# Redis Connection
-spring.data.redis.host=localhost
-spring.data.redis.port=6379
-spring.data.redis.password=redis_password_123
-
-# View Counter Settings
-view.sync.enabled=true
-view.sync.interval-ms=30000    # Sync every 30 seconds
-view.sync.batch-size=50        # Process 50 products per batch
 ```
 
 ---
@@ -668,7 +528,6 @@ docker-compose up -d
 │              ▼                     ▼                     ▼                         │
 │    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐                 │
 │    │   MySQL DB      │   │  Elasticsearch  │   │   Redis Cache   │                 │
-│    │   (Write Store) │   │   (Search Index)│   │ (View Counters) │                 │
 │    │   (Cluster)     │   │   (Cluster)     │   │   (Cluster)     │                 │
 │    └─────────────────┘   └─────────────────┘   └─────────────────┘                 │
 │                                                                                     │
@@ -704,73 +563,6 @@ docker-compose up -d
 
 # Performance tests
 ./mvnw test -Dtest="**/*PerformanceTest"
-```
-
----
-
-## 🔌 Key API Endpoints
-
-### Product Management
-```bash
-# Get product (auto-increments view count in Redis)
-GET /api/v1/products/{id}?userId=user123&sessionId=session456
-
-# Create product
-POST /api/v1/products
-
-# Update product  
-PUT /api/v1/products/{id}
-
-# Search products
-GET /api/v1/products/search?query=laptop&page=0&size=10
-```
-
-### Redis View Counter Admin APIs
-```bash
-# Get view statistics
-GET /api/v1/admin/views/stats
-
-# Get specific product view count
-GET /api/v1/admin/views/product/{productId}
-
-# Get sync statistics  
-GET /api/v1/admin/views/sync-stats
-
-# Trigger manual sync (Redis → Database)
-POST /api/v1/admin/views/sync
-```
-
-### System Administration
-```bash
-# Health check
-GET /actuator/health
-
-# Metrics
-GET /actuator/metrics
-
-# Trigger full Elasticsearch sync
-POST /api/v1/admin/sync/full
-
-# Batch event publishing (testing)
-POST /api/v1/admin/publish-batch
-```
-
-### Example Usage Flow
-```bash
-# 1. View a product (increments Redis counter)
-curl "http://localhost:8080/api/v1/products/1?userId=john&sessionId=abc123"
-
-# 2. Check view count immediately
-curl "http://localhost:8080/api/v1/admin/views/product/1"
-# Response: {"totalViews": 1, "dailyViews": 1}
-
-# 3. Monitor Redis data
-docker exec -it ecombackend-redis-1 redis-cli -a redis_password_123
-redis> GET product:views:1
-"1"
-
-# 4. Wait 30 seconds for background sync, then check database consistency
-curl "http://localhost:8080/api/v1/admin/views/sync-stats"
 ```
 
 ---

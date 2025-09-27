@@ -135,34 +135,6 @@ class ProductServiceTest {
     }
     
     @Test
-    @DisplayName("Should find product by ID")
-    void shouldFindProductById() {
-        // Given
-        when(productRepository.findById(1L)).thenReturn(Optional.of(testProduct));
-        when(productMapper.toDto(testProduct)).thenReturn(testProductDto);
-        
-        // When
-        Optional<ProductDto> result = productService.getProductById(1L);
-        
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get()).isEqualTo(testProductDto);
-    }
-    
-    @Test
-    @DisplayName("Should return empty when product not found by ID")
-    void shouldReturnEmptyWhenProductNotFoundById() {
-        // Given
-        when(productRepository.findById(1L)).thenReturn(Optional.empty());
-        
-        // When
-        Optional<ProductDto> result = productService.getProductById(1L);
-        
-        // Then
-        assertThat(result).isEmpty();
-    }
-    
-    @Test
     @DisplayName("Should update product successfully and publish event")
     void shouldUpdateProductSuccessfully() {
         // Given

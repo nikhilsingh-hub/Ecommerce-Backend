@@ -4,6 +4,7 @@ import com.Ecom.backend.application.dto.ProductDto;
 import com.Ecom.backend.application.dto.ProductSearchRequest;
 import com.Ecom.backend.application.dto.ProductSearchResponse;
 import com.Ecom.backend.application.mapper.ProductMapper;
+import com.Ecom.backend.application.service.ViewService.ViewCounterService;
 import com.Ecom.backend.domain.entity.Product;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductDocument;
 import com.Ecom.backend.infrastructure.elasticsearch.ProductSearchRepository;
@@ -16,9 +17,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -27,9 +31,6 @@ import java.util.stream.Collectors;
 /**
  * Service for advanced product search capabilities using Elasticsearch.
  * Provides fallback to MySQL when Elasticsearch is unavailable.
- * 
- * This service follows the Single Responsibility Principle by focusing
- * solely on search operations and delegating business logic to ProductService.
  */
 @Service
 @Slf4j
@@ -39,16 +40,43 @@ public class ProductSearchService {
     private final ProductSearchRepository searchRepository;
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    private final ViewCounterService viewCounterService;
     
     @Value("${product.search.popularity-threshold:10.0}")
     private Double popularityThreshold;
-    
+
+    /**
+     * Get product by ID
+     *
+     * @param productId Product ID
+     * @return Product DTO if found
+     */
+    @Transactional(readOnly = true)
+    public Optional<ProductDto> getProductById(Long productId) {
+
+        try {
+            log.debug("Fetching product with ID: {}", productId);
+            Optional<ProductDto> product =  productRepository.findById(productId)
+                    .map(productMapper::toDto);
+            if (product.isPresent()){
+                // Record view event for analytics
+                viewCounterService.incrementProductViews(productId);
+            }
+            return product;
+        } catch (Exception e) {
+            log.warn("Elasticsearch search failed, falling back to MySQL: {}", e.getMessage());
+            return Optional.empty();
+        }
+
+    }
+
     /**
      * Perform advanced product search with filters and pagination
      * 
      * @param searchRequest Search parameters and filters
      * @return Search results with pagination metadata
      */
+
     public ProductSearchResponse searchProducts(ProductSearchRequest searchRequest) {
         log.debug("Searching products with request: {}", searchRequest);
         
@@ -67,42 +95,31 @@ public class ProductSearchService {
      */
     private Page<ProductDocument> performElasticsearchQuery(ProductSearchRequest searchRequest) {
         Pageable pageable = createPageable(searchRequest);
-        
-        // Use repository methods for simplified search
+
+        // Default filters
+        List<String> categories = searchRequest.getCategories() != null ? searchRequest.getCategories() : Collections.emptyList();
+        BigDecimal minPrice = searchRequest.getMinPrice() != null ? searchRequest.getMinPrice() : BigDecimal.ZERO;
+        BigDecimal maxPrice = searchRequest.getMaxPrice() != null ? searchRequest.getMaxPrice() : BigDecimal.valueOf(Double.MAX_VALUE);
+
         if (!StringUtils.hasText(searchRequest.getQuery())) {
-            // Search with filters only
-            if (searchRequest.getCategories() != null && !searchRequest.getCategories().isEmpty()) {
-                return searchRepository.findByCategoriesIn(searchRequest.getCategories(), pageable);
-            } else if (searchRequest.getMinPrice() != null || searchRequest.getMaxPrice() != null) {
-                return searchRepository.findByPriceBetween(
-                    searchRequest.getMinPrice() != null ? searchRequest.getMinPrice() : java.math.BigDecimal.ZERO,
-                    searchRequest.getMaxPrice() != null ? searchRequest.getMaxPrice() : java.math.BigDecimal.valueOf(Double.MAX_VALUE),
-                    pageable
-                );
+            if (!categories.isEmpty()) {
+                return searchRepository.findByCategoriesIn(categories, pageable);
             } else {
-                // Return all products if no filters
-                return searchRepository.findAll(pageable);
+                return searchRepository.findByPriceBetween(minPrice, maxPrice, pageable);
             }
         } else {
-            // Use simple autocomplete fuzzy search
-            try {
-                Page<ProductDocument> autocompleteResults = searchRepository.autocompleteFuzzySearch(searchRequest.getQuery(), pageable);
-                if (autocompleteResults.hasContent()) {
-                    log.debug("Autocomplete fuzzy search found {} results for query: {}", 
-                        autocompleteResults.getTotalElements(), searchRequest.getQuery());
-                    return autocompleteResults;
-                } else {
-                    // Fallback to exact search if no fuzzy results
-                    log.debug("No autocomplete results found, falling back to exact search for query: {}", searchRequest.getQuery());
-                    return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
-                }
-            } catch (Exception e) {
-                log.warn("Autocomplete fuzzy search failed, using exact search: {}", e.getMessage());
-                return searchRepository.multiFieldSearch(searchRequest.getQuery(), pageable);
-            }
+            // Search with multi-field + fuzzy + filters
+            return searchRepository.searchProducts(
+                    searchRequest.getQuery(),
+                    categories,
+                    minPrice,
+                    maxPrice,
+                    pageable
+            );
         }
     }
-    
+
+
     /**
      * Create pageable object from search request
      */

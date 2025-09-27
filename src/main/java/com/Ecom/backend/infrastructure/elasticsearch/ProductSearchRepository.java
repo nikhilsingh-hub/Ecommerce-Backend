@@ -31,14 +31,34 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
     /**
      * Multi-field search across name, description, and SKU with fuzzy matching
      */
-    @Query("{"
-        + "\"multi_match\": {"
-        + "  \"query\": \"?0\","
-        + "  \"fields\": [\"name^3\", \"description^2\", \"sku^2\"],"
-        + "  \"fuzziness\": \"AUTO\","
-        + "  \"prefix_length\": 0"
-        + "}}")
-    Page<ProductDocument> multiFieldSearchWithFuzzy(String query, Pageable pageable);
+    @Query("""
+    {
+      "bool": {
+        "must": [
+          {
+            "multi_match": {
+              "query": "?0",
+              "fields": ["name^4", "category^2", "description"],
+              "type": "best_fields",
+              "fuzziness": "AUTO",
+              "operator": "and"
+            }
+          }
+        ],
+        "filter": [
+          { "terms": { "category": "?1" } },
+          { "range": { "price": { "gte": "?2", "lte": "?3" } } }
+        ]
+      }
+    }
+    """)
+    Page<ProductDocument> searchProducts(
+            String query,
+            List<String> categories,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Pageable pageable
+    );
     
     /**
      * Exact multi-field search (fallback)
@@ -92,7 +112,21 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
     /**
      * Autocomplete search for product names with fuzzy matching
      */
-    @Query("{\"multi_match\": {\"query\": \"?0\", \"fields\": [\"name^3\", \"name.suggest^2\"], \"fuzziness\": \"AUTO\", \"prefix_length\": 0, \"type\": \"bool_prefix\"}}")
+    @Query("""
+    {
+      "size": 10,
+      "_source": ["id", "name"],
+      "query": {
+        "match_phrase_prefix": {
+          "name": {
+            "query": "?0",
+            "max_expansions": 50,
+            "fuzziness": "AUTO"
+          }
+        }
+      }
+    }
+    """)
     List<ProductDocument> autocompleteProductNames(String query);
     
     /**
@@ -100,10 +134,4 @@ public interface ProductSearchRepository extends ElasticsearchRepository<Product
      */
     @Query("{\"more_like_this\": {\"fields\": [\"name\", \"description\", \"categories\"], \"like\": [{\"_index\": \"products\", \"_id\": \"?0\"}], \"min_term_freq\": 1, \"min_doc_freq\": 1, \"max_query_terms\": \"50\"}}")
     Page<ProductDocument> findSimilarProducts(String productId, Pageable pageable);
-    
-    /**
-     * Simple autocomplete fuzzy search using name.autocomplete field
-     */
-    @Query("{\"match\": {\"name.autocomplete\": {\"query\": \"?0\", \"fuzziness\": \"AUTO\"}}}")
-    Page<ProductDocument> autocompleteFuzzySearch(String query, Pageable pageable);
 }

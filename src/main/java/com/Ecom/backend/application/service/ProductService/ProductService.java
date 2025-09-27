@@ -48,7 +48,6 @@ public class ProductService {
      * @return Created product DTO
      * @throws IllegalArgumentException if SKU already exists
      */
-    @Transactional
     public ProductDto createProduct(CreateProductRequest request) {
         log.debug("Creating product with SKU: {}", request.getSku());
         
@@ -88,25 +87,11 @@ public class ProductService {
     }
     
     /**
-     * Get product by ID
-     * 
-     * @param productId Product ID
-     * @return Product DTO if found
-     */
-    @Transactional(readOnly = true)
-    public Optional<ProductDto> getProductById(Long productId) {
-        log.debug("Fetching product with ID: {}", productId);
-        return productRepository.findById(productId)
-            .map(productMapper::toDto);
-    }
-    
-    /**
      * Get product by SKU
      * 
      * @param sku Product SKU
      * @return Product DTO if found
      */
-    @Transactional(readOnly = true)
     public Optional<ProductDto> getProductBySku(String sku) {
         log.debug("Fetching product with SKU: {}", sku);
         return productRepository.findBySku(sku)
@@ -208,126 +193,18 @@ public class ProductService {
         
         log.info("Deleted product {} with ID {}", product.getSku(), product.getId());
     }
-    
     /**
-     * Search products with filters and pagination
-     * 
-     * @param query Search query (optional)
-     * @param categories Category filter (optional)
-     * @param minPrice Minimum price filter (optional)
-     * @param maxPrice Maximum price filter (optional)
+     * Get all products with pagination
+     *
      * @param pageable Pagination parameters
-     * @return Page of matching products
+     * @return Page of product DTOs
      */
     @Transactional(readOnly = true)
-    public Page<ProductDto> searchProducts(
-            String query,
-            List<String> categories,
-            BigDecimal minPrice,
-            BigDecimal maxPrice,
-            Pageable pageable) {
-        
-        log.debug("Searching products with query: {}, categories: {}, price range: {} - {}", 
-            query, categories, minPrice, maxPrice);
-        
-        Page<Product> products = productRepository.searchWithFilters(
-            query, categories, minPrice, maxPrice, pageable);
-        
+    public Page<ProductDto> getAllProducts(Pageable pageable) {
+        log.debug("Fetching all products with pagination: {}", pageable);
+        Page<Product> products = productRepository.findAllWithCategories(pageable);
         return products.map(productMapper::toDto);
     }
-    
-    /**
-     * Find related products for a given product
-     * 
-     * @param productId Product ID to find related products for
-     * @param limit Maximum number of related products to return
-     * @return List of related product DTOs
-     */
-    @Transactional(readOnly = true)
-    public List<ProductDto> findRelatedProducts(Long productId, int limit) {
-        log.debug("Finding related products for product ID: {}", productId);
-        
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new IllegalArgumentException("Product not found with ID: " + productId));
-        
-        List<Product> relatedProducts = productRepository.findRelatedProductsByCategory(
-            productId, product.getCategories(), 
-            org.springframework.data.domain.PageRequest.of(0, limit));
-        
-        return productMapper.toDtoList(relatedProducts);
-    }
-    
-    /**
-     * Record a product view for analytics using Redis for high performance
-     * 
-     * @param productId Product ID that was viewed
-     * @param userId User ID (optional)
-     * @param sessionId Session ID
-     */
-    public void recordProductView(Long productId, String userId, String sessionId) {
-        log.debug("Recording view for product ID: {} by user: {}", productId, userId);
-        
-        try {
-            // Increment view count in Redis for real-time performance
-            Long newViewCount = viewCounterService.incrementProductViews(productId);
-            
-            log.debug("Incremented views for product {} to {} (stored in Redis)", productId, newViewCount);
-            
-            // Optional: Publish real-time analytics event for immediate processing
-            // Note: The batch sync will also generate events, so this is for real-time analytics only
-            if (shouldPublishRealTimeEvent(userId, sessionId)) {
-                publishRealTimeViewEvent(productId, userId, sessionId);
-            }
-            
-        } catch (Exception e) {
-            log.error("Failed to record view for product {}: {}", productId, e.getMessage());
-            // Don't throw exception - view tracking shouldn't break the user experience
-        }
-    }
-    
-    /**
-     * Determine if we should publish a real-time view event
-     * This is optional and can be used for immediate analytics processing
-     */
-    private boolean shouldPublishRealTimeEvent(String userId, String sessionId) {
-        // Only publish real-time events for authenticated users or important sessions
-        // This reduces event volume while keeping the most valuable analytics
-        return userId != null && !userId.equals("anonymous");
-    }
-    
-    /**
-     * Publish real-time view event for immediate analytics processing
-     */
-    private void publishRealTimeViewEvent(Long productId, String userId, String sessionId) {
-        try {
-            ProductEvent.ProductViewed event = ProductEvent.ProductViewed.builder()
-                .productId(productId)
-                .sku("") // SKU will be populated by event processor if needed
-                .userId(userId)
-                .sessionId(sessionId)
-                .viewedAt(java.time.LocalDateTime.now())
-                .referrer("real-time")
-                .metadata(java.util.Map.of(
-                    "event_source", "real-time",
-                    "view_increment", "1"
-                ))
-                .build();
-            
-            outboxEventService.storeEvent(
-                productId.toString(),
-                "Product",
-                "ProductViewed",
-                event
-            );
-            
-            log.debug("Published real-time view event for product {}", productId);
-            
-        } catch (Exception e) {
-            log.warn("Failed to publish real-time view event for product {}: {}", productId, e.getMessage());
-            // Don't throw - this is optional analytics
-        }
-    }
-    
     /**
      * Record a product purchase for analytics
      * 
@@ -370,7 +247,51 @@ public class ProductService {
             event
         );
     }
-    
+
+    /**
+     * Determine if we should publish a real-time view event
+     * This is optional and can be used for immediate analytics processing
+     */
+    private boolean shouldPublishRealTimeEvent(String userId, String sessionId) {
+        // Only publish real-time events for authenticated users or important sessions
+        // This reduces event volume while keeping the most valuable analytics
+        return userId != null && !userId.equals("anonymous");
+    }
+
+    /**
+     * Publish real-time view event for immediate analytics processing
+     */
+    private void publishRealTimeViewEvent(Long productId, String userId, String sessionId) {
+        try {
+            ProductEvent.ProductViewed event = ProductEvent.ProductViewed.builder()
+                    .productId(productId)
+                    .sku("") // SKU will be populated by event processor if needed
+                    .userId(userId)
+                    .sessionId(sessionId)
+                    .viewedAt(java.time.LocalDateTime.now())
+                    .referrer("real-time")
+                    .metadata(java.util.Map.of(
+                            "event_source", "real-time",
+                            "view_increment", "1"
+                    ))
+                    .build();
+
+            outboxEventService.storeEvent(
+                    productId.toString(),
+                    "Product",
+                    "ProductViewed",
+                    event
+            );
+
+            log.debug("Published real-time view event for product {}", productId);
+
+        } catch (Exception e) {
+            log.warn("Failed to publish real-time view event for product {}: {}", productId, e.getMessage());
+            // Don't throw - this is optional analytics
+        }
+    }
+
+
     /**
      * Get products by category with pagination
      * 
@@ -381,19 +302,6 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Page<ProductDto> getProductsByCategories(List<String> categories, Pageable pageable) {
         Page<Product> products = productRepository.findByCategoriesIn(categories, pageable);
-        return products.map(productMapper::toDto);
-    }
-    
-    /**
-     * Get all products with pagination
-     * 
-     * @param pageable Pagination parameters
-     * @return Page of product DTOs
-     */
-    @Transactional(readOnly = true)
-    public Page<ProductDto> getAllProducts(Pageable pageable) {
-        log.debug("Fetching all products with pagination: {}", pageable);
-        Page<Product> products = productRepository.findAllWithCategories(pageable);
         return products.map(productMapper::toDto);
     }
 
@@ -408,5 +316,52 @@ public class ProductService {
         List<Product> topProducts = productRepository.findTopByPopularity(
             org.springframework.data.domain.PageRequest.of(0, limit));
         return productMapper.toDtoList(topProducts);
+    }
+    /**
+     * Search products with filters and pagination
+     *
+     * @param query Search query (optional)
+     * @param categories Category filter (optional)
+     * @param minPrice Minimum price filter (optional)
+     * @param maxPrice Maximum price filter (optional)
+     * @param pageable Pagination parameters
+     * @return Page of matching products
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductDto> searchProducts(
+            String query,
+            List<String> categories,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Pageable pageable) {
+
+        log.debug("Searching products with query: {}, categories: {}, price range: {} - {}",
+                query, categories, minPrice, maxPrice);
+
+        Page<Product> products = productRepository.searchWithFilters(
+                query, categories, minPrice, maxPrice, pageable);
+
+        return products.map(productMapper::toDto);
+    }
+
+    /**
+     * Find related products for a given product
+     *
+     * @param productId Product ID to find related products for
+     * @param limit Maximum number of related products to return
+     * @return List of related product DTOs
+     */
+    @Transactional(readOnly = true)
+    public List<ProductDto> findRelatedProducts(Long productId, int limit) {
+        log.debug("Finding related products for product ID: {}", productId);
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found with ID: " + productId));
+
+        List<Product> relatedProducts = productRepository.findRelatedProductsByCategory(
+                productId, product.getCategories(),
+                org.springframework.data.domain.PageRequest.of(0, limit));
+
+        return productMapper.toDtoList(relatedProducts);
     }
 }

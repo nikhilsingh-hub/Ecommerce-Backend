@@ -3,6 +3,8 @@ package com.Ecom.backend.presentation.controller;
 import com.Ecom.backend.application.dto.*;
 import com.Ecom.backend.application.service.ProductService.* ;
 import com.Ecom.backend.application.service.ProductService.ProductService;
+import com.Ecom.backend.application.service.ViewService.ViewCounterService;
+import com.Ecom.backend.infrastructure.elasticsearch.ProductDocument;
 import com.Ecom.backend.presentation.dto.ApiResponse;
 import com.Ecom.backend.presentation.dto.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +37,7 @@ public class ProductController {
     
     private final ProductService productService;
     private final ProductSearchService productSearchService;
+
     
     @Operation(
         summary = "Create a new product",
@@ -152,11 +155,9 @@ public class ProductController {
         
         log.debug("Fetching product with ID: {}", id);
         
-        Optional<ProductDto> product = productService.getProductById(id);
+        Optional<ProductDto> product = productSearchService.getProductById(id);
         
         if (product.isPresent()) {
-            // Record view event for analytics
-            productService.recordProductView(id, userId, sessionId);
             
             ApiResponse<ProductDto> response = ApiResponse.<ProductDto>builder()
                 .success(true)
@@ -347,7 +348,7 @@ public class ProductController {
         log.debug("Finding related products for product ID: {}", id);
         
         // First check if the product exists
-        Optional<ProductDto> product = productService.getProductById(id);
+        Optional<ProductDto> product = productSearchService.getProductById(id);
         if (product.isEmpty()) {
             throw new com.Ecom.backend.presentation.exception.ProductNotFoundException(
                 "Product not found with ID: " + id);
@@ -395,52 +396,7 @@ public class ProductController {
         
         return ResponseEntity.ok(response);
     }
-    
-    @Operation(
-        summary = "Get products by category",
-        description = "Retrieve products filtered by categories with pagination"
-    )
-    @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "200",
-            description = "Products retrieved successfully",
-            content = @Content(schema = @Schema(implementation = ProductDto.class))
-        )
-    })
-    @GetMapping("/categories")
-    public ResponseEntity<ApiResponse<List<ProductDto>>> getProductsByCategories(
-            @Parameter(description = "Categories to filter by", required = true)
-            @RequestParam List<String> categories,
-            @Parameter(description = "Page number (0-based)")
-            @RequestParam(defaultValue = "0") Integer page,
-            @Parameter(description = "Page size")
-            @RequestParam(defaultValue = "20") Integer size,
-            @Parameter(description = "Sort field")
-            @RequestParam(defaultValue = "name") String sortBy,
-            @Parameter(description = "Sort direction")
-            @RequestParam(defaultValue = "asc") String sortDirection,
-            HttpServletRequest httpRequest) {
-        
-        log.debug("Getting products by categories: {}", categories);
-        
-        Sort.Direction direction = "asc".equalsIgnoreCase(sortDirection) ? 
-            Sort.Direction.ASC : Sort.Direction.DESC;
-        
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        List<ProductDto> products = productService.getProductsByCategories(categories, pageRequest)
-            .getContent();
-        
-        ApiResponse<List<ProductDto>> response = ApiResponse.<List<ProductDto>>builder()
-            .success(true)
-            .message("Products retrieved successfully")
-            .data(products)
-            .path(httpRequest.getRequestURI())
-            .build();
-        
-        return ResponseEntity.ok(response);
-    }
-    
+
     @Operation(
         summary = "Autocomplete product names",
         description = "Get autocomplete suggestions for product names"

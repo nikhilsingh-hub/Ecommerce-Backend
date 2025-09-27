@@ -36,20 +36,19 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      */
     @Query("SELECT p FROM Product p JOIN p.categories c WHERE c IN :categories")
     Page<Product> findByCategoriesIn(@Param("categories") List<String> categories, Pageable pageable);
+    /**
+     * Find all products with eagerly loaded categories for Elasticsearch sync
+     * Uses JOIN FETCH to avoid LazyInitializationException
+     */
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.categories")
+    Page<Product> findAllWithCategories(Pageable pageable);
 
     /**
-     * Find products within price range
+     * Find product by ID with eagerly loaded categories
+     * Note: Other collections (attributes, images) will be loaded within transaction context
      */
-    Page<Product> findByPriceBetween(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable);
-
-    /**
-     * Search products by name or description (case-insensitive)
-     */
-    @Query("SELECT p FROM Product p WHERE " +
-           "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(p.description) LIKE LOWER(CONCAT('%', :query, '%'))")
-    Page<Product> searchByNameOrDescription(@Param("query") String query, Pageable pageable);
-
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.categories WHERE p.id = :id")
+    Optional<Product> findByIdWithCategories(@Param("id") Long id);
     /**
      * Complex search with multiple filters
      */
@@ -113,17 +112,17 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT c, COUNT(p) FROM Product p JOIN p.categories c GROUP BY c")
     List<Object[]> countProductsByCategory();
 
-    /**
-     * Find all products with eagerly loaded categories for Elasticsearch sync
-     * Uses JOIN FETCH to avoid LazyInitializationException
-     */
-    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.categories")
-    Page<Product> findAllWithCategories(Pageable pageable);
 
     /**
-     * Find product by ID with eagerly loaded categories
-     * Note: Other collections (attributes, images) will be loaded within transaction context
+     * Find products within price range
      */
-    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.categories WHERE p.id = :id")
-    Optional<Product> findByIdWithCategories(@Param("id") Long id);
+    Page<Product> findByPriceBetween(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable);
+
+    /**
+     * Search products by name or description (case-insensitive)
+     */
+    @Query("SELECT p FROM Product p WHERE " +
+            "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
+            "LOWER(p.description) LIKE LOWER(CONCAT('%', :query, '%'))")
+    Page<Product> searchByNameOrDescription(@Param("query") String query, Pageable pageable);
 }
